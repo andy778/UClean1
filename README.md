@@ -4,6 +4,8 @@ SPDX-License-Identifier: MIT
 <!--
 [![REUSE status](https://api.reuse.software/badge/git.fsfe.org/reuse/api)](https://api.reuse.software/info/git.fsfe.org/reuse/api)
 -->
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/{owner}/{repo}/badge)](https://securityscorecards.dev/viewer/?uri=github.com/{owner}/{repo})
+
 
 # Uponor Clean 1
 Investigate if its possible to get Uponor Clean 1 into Home Assistant
