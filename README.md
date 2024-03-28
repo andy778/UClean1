@@ -1,4 +1,6 @@
-<!--
+# Uponor Clean 1
+
+<!-- 
 SPDX-License-Identifier: MIT
 -->
 <!--
@@ -7,7 +9,7 @@ SPDX-License-Identifier: MIT
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/andy778/UClean1/badge)](https://securityscorecards.dev/viewer/?uri=github.com/andy778/UClean1)
 
 
-# Uponor Clean 1
+
 Investigate if its possible to get Uponor Clean 1 into Home Assistant
 
 ## Hypothesis
