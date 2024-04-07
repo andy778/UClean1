@@ -30,7 +30,7 @@ Investigate if its possible to get Uponor Clean 1 into Home Assistant
 
 ## I2C Memory 
 Extrated with help of a raspberry pi and i2c-tools, Memory exist at adresss 0X50 ass can be seen from below  
-
+```
 i2cdetect -y 1       
      0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
 00:                         -- -- -- -- -- -- -- -- 
@@ -41,8 +41,10 @@ i2cdetect -y 1
 50: 50 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
 60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
 70: -- -- -- -- -- -- -- --                         
+```
 
 Seems to be 17 first bytes that contain some data
+```
 i2cdump -y 1 0x50
 No size specified (using byte-data access)
      0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f    0123456789abcdef
@@ -62,3 +64,4 @@ c0: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff    ................
 d0: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff    ................
 e0: ff ff ff ff ff ff ff ff ff ff 00 ff ff ff ff ff    ................
 f0: ff ff XX XX XX XX XX XX XX XX XX XX XX ff ff ff    ..XXXXXXXXXXX...
+```
