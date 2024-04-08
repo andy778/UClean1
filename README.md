@@ -28,7 +28,7 @@ Investigate if its possible to get Uponor Clean 1 into Home Assistant
 | D11      | Mosfet      | VNE46 AC 4DLMG |
 | OC6      | Mosfet      | 1435 814 |
 
-## I2C Memory 
+## I2C Memory (128-Kbit alias 16kb)
 Extrated with help of a raspberry pi and i2c-tools, Memory exist at adresss 0X50 as can be seen from below  
 ```
 i2cdetect -y 1       
