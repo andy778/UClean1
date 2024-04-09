@@ -21,7 +21,7 @@ Investigate if its possible to get Uponor Clean 1 into Home Assistant
 ## Datasheets 
 | No       | Description | IC           |
 | ---      | ---         |---           |
-| U2       | CPU         | [MC9S08 CTSY1442 411LY 6T32ACFB ](https://www.nxp.com/products/processors-and-microcontrollers/additional-mpu-mcus-architectures/8-bit-s08-mcus/8-bit-general-purpose-gtmcus:S08GT)  |
+| U2       | CPU         | [MC9S08GT32ACFBE](https://www.nxp.com/docs/en/data-sheet/MC9S08GB60A.pdf)  |
 | U10      | Serial      | [sipex 3232](https://www.silicon-ark.co.uk/datasheets/sp3222_3232e-datasheet-sipex.pdf)   |
 | U3       | I2C Mem     | [4128BWP 8424K](https://www.st.com/en/memories/m24128-bw.html) |
 | OC13     | Optoisolator| MOC3063 1512 |
