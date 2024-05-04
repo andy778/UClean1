@@ -69,8 +69,8 @@ f0: ff ff XX XX XX XX XX XX XX XX XX XX XX ff ff ff    ..XXXXXXXXXXX...
 ```
 
 ## Flash content
-To read out the flash content from the CPU using reader like [USBDM](https://sourceforge.net/projects/usbdm/files/) will get you and srecord s19 file. 
-This file one need to convert to binary file with e.g objcopy.
+To read out the flash content from the CPU using reader like [USBDM](https://sourceforge.net/projects/usbdm/files/) will get you and srecord [clean1.s19](clean1.s19) file. 
+This file one need to convert to binary file [clean1.bin](clean1.bin) with e.g objcopy.
 
 ```
 objcopy --input-target=srec --output-target=binary clean1.s19 clean1.bin
