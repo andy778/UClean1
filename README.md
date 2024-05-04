@@ -13,8 +13,8 @@ SPDX-License-Identifier: MIT
 Investigate if its possible to get Uponor Clean 1 into Home Assistant
 
 ## Hypothesis
-* From the modem port connect an ESPHOME and insert values into Home Assistant
-* It's 868.35MHz radio between inner unit and outer unit 
+* From the modem port connect an ESPHOME (e.g ESP32 S3) and insert values into Home Assistant
+* It's 868.35MHz radio between inner unit and outer unit, and make decoding of this device in [rtl_433](https://github.com/merbanan/rtl_433/)  
 
 ![PCB with text](uclean1.png)
 
@@ -29,7 +29,9 @@ Investigate if its possible to get Uponor Clean 1 into Home Assistant
 | OC6      | Mosfet      | 1435 814 |
 
 ## I2C Memory (128-Kbit alias 16kb)
-Extrated with help of a raspberry pi and i2c-tools, Memory exist at adresss 0X50 as can be seen from below  
+Extrated with help of a raspberry pi and i2c-tools, Memory exist at adresss 0X50 as can be seen from below. 
+
+Note! I think one need to desolder the memory chips as there was different results.   
 ```
 i2cdetect -y 1       
      0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
@@ -64,4 +66,12 @@ c0: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff    ................
 d0: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff    ................
 e0: ff ff ff ff ff ff ff ff ff ff 00 ff ff ff ff ff    ................
 f0: ff ff XX XX XX XX XX XX XX XX XX XX XX ff ff ff    ..XXXXXXXXXXX...
+```
+
+## Flash content
+To read out the flash content from the CPU using reader like [USBDM](https://sourceforge.net/projects/usbdm/files/) will get you and srecord s19 file. 
+This file one need to convert to binary file with e.g objcopy.
+
+```
+objcopy --input-target=srec --output-target=binary clean1.s19 clean1.bin
 ```
