@@ -1,0 +1,134 @@
+# U3 — M24128 I2C EEPROM
+
+U3 is an [M24128](https://www.st.com/en/memories/m24128-bw.html) 128-Kbit (16 KB)
+serial EEPROM on the Clean 1 PCB, marked `4128BWP 8424K`. It sits on the board's
+I2C bus at address **`0x50`** and holds the firmware's config + telemetry
+records. This page covers how to wire it to a Raspberry Pi, how to read it, and
+what we have found so far.
+
+## Wiring the Raspberry Pi to U3
+
+The M24128 is an 8-pin device (SO8/DIP8). Standard pinout:
+
+| Pin | Name      | Function                         |
+| --- | ---       | ---                              |
+| 1   | E0        | Chip-address bit 0               |
+| 2   | E1        | Chip-address bit 1               |
+| 3   | E2        | Chip-address bit 2               |
+| 4   | VSS       | Ground                           |
+| 5   | SDA       | I2C data                         |
+| 6   | SCL       | I2C clock                        |
+| 7   | WC        | Write control (low = writable)   |
+| 8   | VCC       | +1.8 … 5.5 V supply              |
+
+Because the chip answers at `0x50`, the three address pins **E0/E1/E2 are all
+tied low** (the I2C device-type code `1010` + `E2 E1 E0 = 000` = `0x50`).
+
+Connect it to the Pi's 40-pin header, I2C **bus 1**:
+
+| M24128 pin | Wire to                | Pi header pin |
+| ---        | ---                    | ---           |
+| 8  VCC     | 3V3                    | pin 1         |
+| 4  VSS     | GND                    | pin 6         |
+| 5  SDA     | GPIO2 / SDA1           | pin 3         |
+| 6  SCL     | GPIO3 / SCL1           | pin 5         |
+| 1  E0      | GND                    | any GND       |
+| 2  E1      | GND                    | any GND       |
+| 3  E2      | GND                    | any GND       |
+| 7  WC      | GND (or VCC, see below)| any GND / 3V3 |
+
+Notes:
+- Bus 1 on the Pi has on-board ~1.8 kΩ pull-ups on SDA/SCL, so external
+  pull-ups are usually unnecessary.
+- **WC**: tie low to allow writes, or to VCC to hard write-protect. For
+  read-only dumping either is fine — tie to VCC if you want to guarantee the
+  chip can't be modified.
+- Use **3V3, never 5V**, on a Pi — the GPIO is not 5V-tolerant.
+- Enable I2C first: `sudo raspi-config` → Interface Options → I2C, then reboot.
+
+> ⚠️ This is the *standard* M24128↔Pi wiring, reconstructed from the datasheet —
+> verify it against the actual board before powering up.
+
+## Reading in-circuit vs. desoldered
+
+The original dump showed "different results" between attempts. That is almost
+certainly **bus contention**, not a bad chip: while the board is powered the
+MC9S08 (U2) is also a master on this same I2C bus, so the Pi and the CPU fight
+over it. Pick one of:
+
+- hold the CPU in reset while the Pi reads, **or**
+- power the EEPROM from the Pi with the rest of the board off, **or**
+- desolder U3 (last resort) and read it on a breadboard / programmer.
+
+## Confirm it is present
+
+```
+i2cdetect -y 1
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:                         -- -- -- -- -- -- -- --
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+50: 50 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+70: -- -- -- -- -- -- -- --
+```
+
+## The full 16 KB dump (do this)
+
+`i2cdump` is **not enough**: it only reaches offset `0x00–0xFF` and sends a
+single address byte, but the M24128 needs a **14-bit (2-byte) address**. The
+firmware's live records live near `0x3A00–0x3FFF`, well outside `i2cdump`'s
+reach (see "Where the data lives" below). Use the helper, which does correct
+2-byte addressing:
+
+```bash
+tools/dump_eeprom.sh 1 clean1_eeprom.bin
+```
+
+It prefers the kernel `at24` driver (clean binary) and falls back to chunked
+`i2ctransfer`. Spot-check one known record:
+
+```bash
+i2ctransfer -y 1 w2@0x50 0x3a 0x9d r5     # 5 bytes at 0x3A9D
+```
+
+Deliverable: `clean1_eeprom.bin`, exactly **16384 bytes**.
+
+## What the old partial dump showed
+
+`i2cdump` captured only page 0. The first ~17 bytes carry data; `XX` marks
+bytes redacted here. This is **not** the interesting region — it is shown for
+completeness:
+
+```
+i2cdump -y 1 0x50
+No size specified (using byte-data access)
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f    0123456789abcdef
+00: 05 00 69 00 6d 00 67 00 00 01 20 00 79 00 00 6f    ?.i.m.g..? .y..o
+10: 00 XX XX XX XX XX 00 XX ff XX XX XX ff XX XX XX    .XXXXX.X.XXX.XXX
+20: XX XX XX XX XX ff ff XX ff ff ff ff ff ff ff ff    XXXXX..X........
+30: ff ff ff ff ff ff ff ff ff ff ff XX ff XX XX XX    ...........X.XXX
+40: ff XX XX XX XX XX XX XX XX ff XX XX XX XX XX ff    .XXXXXXXX.XXXXX.
+50: XX XX XX XX XX XX XX XX XX XX ff ff ff ff ff ff    XXXXXXXXXX......
+60: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff    ................
+70: ff ff ff ff ff ff ff ff XX XX ff XX XX XX XX XX    ........XX.XXXXX
+80: XX XX XX XX XX ff ff ff ff ff ff ff ff ff ff ff    XXXXX...........
+90: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff    ................
+a0: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff    ................
+b0: ff ff ff ff ff ff XX XX ff ff ff ff ff ff ff ff    ......XX........
+c0: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff    ................
+d0: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff    ................
+e0: ff ff ff ff ff ff ff ff ff ff 00 ff ff ff ff ff    ................
+f0: ff ff XX XX XX XX XX XX XX XX XX XX XX ff ff ff    ..XXXXXXXXXXX...
+```
+
+## Where the data really lives
+
+From the firmware analysis (see `ANALYSIS.md`), the MC9S08 reads/writes its
+live records near the **top** of the chip — e.g. a 5-byte record at `0x3A9D`, a
+2-byte record at `0x3AD5`, plus stride-8 indexed record arrays. The page-0 dump
+above misses all of it. Once a full 16 KB `clean1_eeprom.bin` exists, the
+`stream/eeprom` work can map `0x3A00–0x3FFF` against the firmware's I2C
+accessors (`FUN_a554` and its length-typed wrappers).
