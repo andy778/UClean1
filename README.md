@@ -79,3 +79,14 @@ This file one need to convert to binary file [clean1.bin](clean1.bin) with e.g o
 ```
 objcopy --input-target=srec --output-target=binary clean1.s19 clean1.bin
 ```
+
+## Firmware analysis (Path B)
+The CPU flash was disassembled in [Ghidra](https://ghidra-sre.org/). Import `clean1.s19` directly (the `MotorolaHexLoader` places the bytes at their real addresses) with language `HCS08:BE:16:MC9S08GB60`. The image is sparse: two config bytes at `0x107F`/`0x1800`, main code `0x8000-0xFFFF`, the interrupt vectors at `0xFFD0-0xFFFF`, and the reset vector (`0xFFFE`) points at the entry `0x807F`. Auto-analysis recovers ~267 functions.
+
+Peripheral driver locations:
+* **SPI -> nRF9E5 radio:** the SPI byte-shift primitive is around `0xBD56`; writes to the SPI data register cluster at `0xBD5B-0xBDB1`. This is where the nRF905 `W_CONFIG` payload (channel / address / CRC) is set up.
+* **I2C -> M24128 EEPROM (U3):** the bus driver is `0xDED1-0xE03A`. `FUN_ded1` is start + send-byte, `FUN_dfd2` reads a byte, `FUN_df6a` is stop, and `FUN_a554(buf, _, len, addrHi, addrLo)` is a generic sequential read of `len` bytes from a 16-bit word address. There are length-typed wrappers around it (1/2/4/5/16/23/25-byte reads).
+* **Peripheral init:** `0xFE80` configures the SPI (`SPI1C1/C2/BR`) and I2C (`IIC1A/IIC1F`) registers; it runs from reset.
+
+### Where the EEPROM data really lives
+The firmware reads/writes records near the **top** of the M24128, e.g. `0x3A9D` (5-byte record) and `0x3AD5` (2-byte), plus stride-8 indexed record arrays. The `i2cdump` above only captured page 0 (`0x00-0xFF`), so it **misses the active region around `0x3A00-0x3FFF`**. A full 16-Kbit dump of that area is needed to see the live config/telemetry. (`i2cdump` only does single-byte addressing; use a small 2-byte-addressed read loop or the kernel `at24`/`eeprom` driver instead.)
