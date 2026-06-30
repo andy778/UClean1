@@ -18,6 +18,9 @@ Investigate if its possible to get Uponor Clean 1 into Home Assistant
 
 ![PCB with text](uclean1.png)
 
+## Modem port / serial (Path A)
+Attempted to read the modem port directly with a laptop and a USB-to-serial cable, sweeping the common baud rates. No traffic was observed on any of them — the port appeared dead. This avenue is parked for now in favour of the flash/firmware work below (Path B).
+
 ## Datasheets 
 | No       | Description | IC           |
 | ---      | ---         |---           |
