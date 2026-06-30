@@ -6,7 +6,7 @@ mostly-independent streams; each can be worked in its own branch/worktree.
 | Stream | Goal | Status |
 | ---    | ---  | ---    |
 | Serial (Path A) | Tap the modem port | **Dead** — no traffic at common baud rates |
-| Radio / SPI | Extract the nRF905 config from firmware → native nRF905 receiver | In progress |
+| Radio / SPI | Recover the nRF905 config → native nRF905 receiver | **Not in this firmware** — see below; needs SDR or an nRF9E5 dump |
 | EEPROM | Map the live records the firmware reads from U3 | Blocked on a full 16 KB dump |
 | rtl_433 | FSK decoder for the 868.35 MHz link → MQTT → Home Assistant | Not started |
 
@@ -27,9 +27,14 @@ vectors `0xFFD0-0xFFFF`, reset entry `0x807F`. ~267 functions recovered.
 ## Findings so far
 
 ### Drivers
-- **SPI → nRF9E5 radio:** byte-shift primitive ~`0xBD56`; `SPI1D` writes at
-  `0xBD5B-0xBDB1`. The nRF905 `W_CONFIG` payload (channel/address/CRC) is set up
-  here. Needs GUI stack-frame cleanup to read cleanly.
+- **SPI → nRF9E5 radio (slave side):** `0xBD56` is the SPI **receive interrupt
+  handler** (vector `0xFFE0` = `BD 56`), not a config routine. Peripheral init
+  writes `MOV #$CC,$28` → `SPI1C1=0xCC`, i.e. `MSTR=0`: the MC9S08 is the SPI
+  **slave**. The nRF9E5's embedded 8051 is the SPI master and owns the nRF905
+  `W_CONFIG` (channel/address/CRC). That config is therefore **not present in
+  `clean1.s19`** — it must come from an SDR capture or a dump of the nRF9E5's
+  internal program memory. The `SPI1D` accesses at `0xBD5B-0xBDB1` are the
+  slave's byte handling, not config setup.
 - **I2C → M24128 (U3):** bus driver `0xDED1-0xE03A`. `FUN_ded1` = start+send byte,
   `FUN_dfd2` = read byte, `FUN_df6a` = stop, `FUN_a554(buf, _, len, addrHi, addrLo)`
   = sequential read of `len` bytes from a 16-bit word address. Length-typed
