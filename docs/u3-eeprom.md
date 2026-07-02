@@ -128,7 +128,11 @@ f0: ff ff XX XX XX XX XX XX XX XX XX XX XX ff ff ff    ..XXXXXXXXXXX...
 
 From the firmware analysis (see `ANALYSIS.md`), the MC9S08 reads/writes its
 live records near the **top** of the chip — e.g. a 5-byte record at `0x3A9D`, a
-2-byte record at `0x3AD5`, plus stride-8 indexed record arrays. The page-0 dump
-above misses all of it. Once a full 16 KB `clean1_eeprom.bin` exists, the
-`stream/eeprom` work can map `0x3A00–0x3FFF` against the firmware's I2C
-accessors (`FUN_a554` and its length-typed wrappers).
+2-byte record at `0x3AD5`, plus stride indexed record arrays. The page-0 dump
+above misses all of it.
+
+A full 16 KB dump now exists — [`clean1_eeprom.bin`](../clean1_eeprom.bin) — and
+is decoded in **[docs/eeprom-map.md](eeprom-map.md)**. The `0x3A9D` region turned
+out to be the GSM/SMS alert config (menu password + phone-number slots), and the
+`0x0000–0x05BF` block is the static cycle/phase/alarm label table. There is **no
+live telemetry** in the EEPROM.
