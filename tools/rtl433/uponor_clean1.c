@@ -61,7 +61,8 @@ Manchester-decoded payload as a hex string, so captures can be correlated with
 the display. It ships disabled until the fields and CRC are pinned down.
 
 Flex-decoder equivalent for a first capture pass (100 kbps, then Manchester by
-eye): rtl_433 -X 'n=uclean1,m=FSK_PCM,s=10,l=10,r=100'
+eye). Tune ~150 kHz low so the carrier lands off the RTL-SDR DC spike (see
+docs/rtl433.md): rtl_433 -f 868.20M -X 'n=uclean1,m=FSK_PCM,s=10,l=10,r=100'
 */
 
 #include "decoder.h"
@@ -85,6 +86,13 @@ static inline int uclean1_bit(uint8_t const *buf, unsigned i)
 // Manchester-decode `nbits` raw bits from `raw` (packed) starting at raw-bit
 // `start`, convention raw 01->1, raw 10->0. Writes packed decoded bits to `out`.
 // Returns number of decoded bits; *illegal counts 00/11 violations.
+//
+// rtl_433 does ship bitbuffer_manchester_decode(), which uses this same
+// convention (it emits the second bit of each pair). We deliberately don't use
+// it here: it aborts at the FIRST Manchester violation and decodes a single
+// phase alignment. Real captures of this link carry ~3-4% illegal pairs (noise)
+// at an unknown bit phase, so we instead tolerate violations, count them as a
+// quality metric, and let the caller try both phases and keep the cleaner one.
 static unsigned uclean1_manchester(uint8_t const *raw, unsigned start,
         unsigned nbits, uint8_t *out, unsigned out_cap_bits, unsigned *illegal)
 {
