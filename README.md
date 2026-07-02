@@ -46,6 +46,37 @@ This file one need to convert to binary file [dumps/u2-mc9s08gt-flash.bin](dumps
 objcopy --input-target=srec --output-target=binary dumps/u2-mc9s08gt-flash.s19 dumps/u2-mc9s08gt-flash.bin
 ```
 
+### Reading the flash back out (BDM dump vs. security)
+
+Reading the flash is a **debug** operation, not a *programming* one. A plain flash
+programmer only exposes the program flow (blank-check → erase → program → verify)
+and has no "read". To dump memory you use the BDM debug channel and a tool that
+issues the BDM memory-read command:
+
+- **USBDM + GDB server** — start the HCS08 GDB server that ships with USBDM, then in
+  the HCS08 `gdb`:
+
+  ```
+  target remote localhost:1234
+  dump srec memory flash.s19 0x8000 0x10000   # 32 KB flash of the GT32
+  dump srec memory ram.s19   0x0080 0x1080    # RAM, optional
+  ```
+
+  `dump srec memory FILE START END` walks the range over BDM and writes an S-record
+  (use `dump ihex memory …` for Intel-hex). MC9S08GT32 map: 32 KB flash at
+  **0x8000–0xFFFF**, RAM at 0x0080–0x107F.
+- **CodeWarrior / P&E Multilink** — connect in the debugger and use *Import/Export
+  Memory → Export* (or the `save` command) over the flash range.
+
+**Flash security caveat.** If read-back is blocked, the part is *secured*: the FSEC
+byte at **0xFFBF** (SEC01:SEC00) makes a programmer able only to mass-erase, never
+read. When secured, BDM reads of flash and RAM are blocked and the only legal
+operation is a mass-erase (which unsecures by wiping everything — useless for
+dumping). The one non-destructive escape is the 8-byte **backdoor key** at
+0xFFB0–0xFFB7, if the firmware enabled KEYEN and you know it. The existing
+`dumps/u2-mc9s08gt-flash.s19` came out cleanly, so **U2 on this board was not
+secured** — a straight BDM dump is enough.
+
 ## Firmware analysis (Path B)
 The U2 CPU flash (`dumps/u2-mc9s08gt-flash.s19`) was disassembled in [Ghidra](https://ghidra-sre.org/). How the headless analysis was run, the gotchas, the recovered driver map (I2C EEPROM access layer + the SPI-slave finding that rules the radio config out of this dump), and the generated decompiler C now live on their own page: **[docs/ghidra-firmware-analysis.md](docs/ghidra-firmware-analysis.md)**.
 
