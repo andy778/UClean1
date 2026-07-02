@@ -71,11 +71,13 @@ so s=10 is the half-bit period and the output is the DECODED bytes (~326 bits,
 half of ~650). "invert" makes it match our raw 01->1 / 10->0 convention, so the
 fd 7a ba ba ba 83 header prints verbatim. Full recall (all 8 packets of a 4-event
 replay). Its phase lock assumes a leading zero bit, so a row may be off by one
-bit - just search for fd7a as this decoder does. NOTE this is NOT the same as the
-"decode_mc" post-filter, which aborts at the first Manchester violation and only
-tries phase 0, so on these phase-offset, slightly-noisy packets it collapses to
-empty rows - that filter is unusable here, which is why this C decoder rolls its
-own tolerant, two-phase pass.
+bit - just search for fd7a as this decoder does. This C decoder uses the same
+demod (FSK_PULSE_MANCHESTER_ZEROBIT), so the framework hands us the already
+Manchester-decoded bytes and we simply anchor on fd7a.
+NOTE the demod-level slicer is NOT the same as the "decode_mc" post-filter, which
+aborts at the first Manchester violation and only tries phase 0, so on these
+phase-offset, slightly-noisy packets it collapses to empty rows - that filter is
+unusable here.
 To instead see the RAW on-air bits (Manchester still encoded, decode by eye
 01->1/10->0), use FSK_PCM at the full 100 kbps line rate:
   rtl_433 -f 868.20M -Y minmax -X 'n=uclean1,m=FSK_PCM,s=10,l=10,r=100,bits>=400'
@@ -83,7 +85,8 @@ To instead see the RAW on-air bits (Manchester still encoded, decode by eye
 
 #include "decoder.h"
 
-// Raw line rate 100 kbps => 10 us/bit at the PCM demod.
+// Raw line rate 100 kbps => 10 us/bit; the Manchester half-bit is 10 us, so the
+// ZEROBIT slicer uses short==long==10 us.
 #define UCLEAN1_BIT_US 10
 
 // Manchester-decoded header anchor (see notes above): fd 7a precedes the packet.
@@ -93,140 +96,58 @@ static uint8_t const uclean1_sync[] = {0xfd, 0x7a};
 #define UCLEAN1_MIN_BYTES 20
 #define UCLEAN1_MAX_BYTES 64
 
-// Read bit `i` (MSB-first) from a packed byte buffer.
-static inline int uclean1_bit(uint8_t const *buf, unsigned i)
-{
-    return (buf[i >> 3] >> (7 - (i & 7))) & 1;
-}
-
-// Manchester-decode `nbits` raw bits from `raw` (packed) starting at raw-bit
-// `start`, convention raw 01->1, raw 10->0. Writes packed decoded bits to `out`.
-// Returns number of decoded bits; *illegal counts 00/11 violations.
-//
-// rtl_433 does ship bitbuffer_manchester_decode(), which uses this same
-// convention (it emits the second bit of each pair). We deliberately don't use
-// it here: it aborts at the FIRST Manchester violation and decodes a single
-// phase alignment. Real captures of this link carry ~3-4% illegal pairs (noise)
-// at an unknown bit phase, so we instead tolerate violations, count them as a
-// quality metric, and let the caller try both phases and keep the cleaner one.
-static unsigned uclean1_manchester(uint8_t const *raw, unsigned start,
-        unsigned nbits, uint8_t *out, unsigned out_cap_bits, unsigned *illegal)
-{
-    unsigned n = 0;
-    *illegal = 0;
-    for (unsigned i = start; i + 1 < nbits && n < out_cap_bits; i += 2) {
-        int a = uclean1_bit(raw, i);
-        int b = uclean1_bit(raw, i + 1);
-        int d;
-        if (a == 0 && b == 1)
-            d = 1;              // 01 -> 1
-        else if (a == 1 && b == 0)
-            d = 0;              // 10 -> 0
-        else {                  // 00 / 11 : Manchester violation
-            (*illegal)++;
-            d = 0;
-        }
-        if (d)
-            out[n >> 3] |= (uint8_t)(1 << (7 - (n & 7)));
-        else
-            out[n >> 3] &= (uint8_t)~(1 << (7 - (n & 7)));
-        n++;
-    }
-    return n;
-}
-
-// Bit-level search for `pat` (pat_bits long) in packed `buf` of `nbits`.
-// Returns the bit index of the match, or nbits if not found.
-static unsigned uclean1_bitsearch(uint8_t const *buf, unsigned nbits,
-        uint8_t const *pat, unsigned pat_bits)
-{
-    if (pat_bits > nbits)
-        return nbits;
-    for (unsigned off = 0; off + pat_bits <= nbits; ++off) {
-        unsigned k = 0;
-        for (; k < pat_bits; ++k) {
-            if (uclean1_bit(buf, off + k) != uclean1_bit(pat, k))
-                break;
-        }
-        if (k == pat_bits)
-            return off;
-    }
-    return nbits;
-}
-
 static int uponor_clean1_decode(r_device *decoder, bitbuffer_t *bitbuffer)
 {
     int ret = DECODE_ABORT_EARLY;
 
     for (unsigned row = 0; row < bitbuffer->num_rows; ++row) {
-        unsigned raw_bits = bitbuffer->bits_per_row[row];
+        unsigned row_bits = bitbuffer->bits_per_row[row];
 
-        // A ~6.5 ms Manchester packet at 100 kbps is ~650 raw bits.
-        if (raw_bits < UCLEAN1_MIN_BYTES * 16) {
+        // FSK_PULSE_MANCHESTER_ZEROBIT already Manchester-decoded the row, so a
+        // packet is header(6) + ~30 payload bytes of DECODED data.
+        if (row_bits < UCLEAN1_MIN_BYTES * 8) {
             ret = DECODE_ABORT_LENGTH;
             continue;
         }
 
-        // Copy the raw row out as packed bytes.
-        uint8_t raw[128] = {0};
-        unsigned copy_bits = raw_bits > sizeof(raw) * 8 ? sizeof(raw) * 8 : raw_bits;
-        bitbuffer_extract_bytes(bitbuffer, row, 0, raw, copy_bits);
-
-        // Manchester-decode both bit-phase alignments; keep the cleaner one.
-        uint8_t dec[UCLEAN1_MAX_BYTES + 4] = {0};
-        uint8_t best[sizeof(dec)] = {0};
-        unsigned best_bits = 0, best_ill = ~0u;
-        for (unsigned phase = 0; phase < 2; ++phase) {
-            unsigned ill = 0;
-            unsigned nb = uclean1_manchester(raw, phase, copy_bits, dec,
-                    sizeof(dec) * 8, &ill);
-            if (ill < best_ill) {
-                best_ill = ill;
-                best_bits = nb;
-                memcpy(best, dec, sizeof(dec));
-            }
-        }
-
-        // A genuine Manchester packet has very few violations. Random noise
-        // demodulated at 100 kbps sits near 50%. Require < ~15%.
-        if (best_bits < UCLEAN1_MIN_BYTES * 8
-                || best_ill * 100 > (best_bits / 2) * 15) {
-            ret = DECODE_ABORT_EARLY;
-            continue;
-        }
-
-        // Find the fd 7a frame anchor in the decoded stream.
-        unsigned pos = uclean1_bitsearch(best, best_bits,
+        // The ZEROBIT slicer phase-locks on a leading zero bit, so the fd 7a
+        // anchor can land at any bit offset - search for it. Its output polarity
+        // depends on which Manchester convention matched, so if the anchor is not
+        // found, invert the whole buffer and try once more (then restore).
+        unsigned pos = bitbuffer_search(bitbuffer, row, 0,
                 uclean1_sync, sizeof(uclean1_sync) * 8);
-        if (pos >= best_bits) {
+        int inverted = 0;
+        if (pos >= row_bits) {
+            bitbuffer_invert(bitbuffer);
+            inverted = 1;
+            pos = bitbuffer_search(bitbuffer, row, 0,
+                    uclean1_sync, sizeof(uclean1_sync) * 8);
+        }
+        if (pos >= row_bits) {
+            if (inverted)
+                bitbuffer_invert(bitbuffer); // restore for the next row
             decoder_log(decoder, 2, __func__, "sync fd7a not found");
             ret = DECODE_ABORT_EARLY;
             continue;
         }
 
         // Header = fd 7a ba ba ba 83  (6 bytes = 48 bits); payload follows.
-        unsigned hdr_bits = 6 * 8;
-        unsigned payload_start = pos + hdr_bits;
-        if (payload_start + UCLEAN1_MIN_BYTES * 8 > best_bits) {
+        if (pos + (6 + UCLEAN1_MIN_BYTES) * 8 > row_bits) {
+            if (inverted)
+                bitbuffer_invert(bitbuffer);
             ret = DECODE_ABORT_LENGTH;
             continue;
         }
 
-        // Byte-align header + payload for output. Extract up to what we have.
-        unsigned avail_bits = best_bits - pos;
-        unsigned avail_bytes = avail_bits / 8;
+        // Byte-align header + payload from the anchor. Extract what we have.
+        unsigned avail_bytes = (row_bits - pos) / 8;
         if (avail_bytes > UCLEAN1_MAX_BYTES)
             avail_bytes = UCLEAN1_MAX_BYTES;
         uint8_t frame[UCLEAN1_MAX_BYTES] = {0};
-        for (unsigned i = 0; i < avail_bytes; ++i) {
-            uint8_t v = 0;
-            for (unsigned k = 0; k < 8; ++k)
-                v = (uint8_t)((v << 1) | uclean1_bit(best, pos + i * 8 + k));
-            frame[i] = v;
-        }
+        bitbuffer_extract_bytes(bitbuffer, row, pos, frame, avail_bytes * 8);
 
         // frame[0..5] = header, frame[6..] = payload.
-        unsigned payload_len = avail_bytes > 6 ? avail_bytes - 6 : 0;
+        unsigned payload_len = avail_bytes - 6;
 
         char header_str[6 * 2 + 1];
         for (unsigned i = 0; i < 6; ++i)
@@ -242,7 +163,6 @@ static int uponor_clean1_decode(r_device *decoder, bitbuffer_t *bitbuffer)
                 "header",       "Header",       DATA_STRING, header_str,
                 "payload",      "Payload",      DATA_STRING, payload_str,
                 "payload_len",  "Payload bytes",DATA_INT,    (int)payload_len,
-                "mc_illegal",   "MC violations",DATA_INT,    (int)best_ill,
                 NULL);
         /* clang-format on */
         decoder_output_data(decoder, data);
@@ -257,19 +177,20 @@ static char const *const uponor_clean1_output_fields[] = {
         "header",
         "payload",
         "payload_len",
-        "mc_illegal",
         // Real sensor fields go here once [U6] is resolved, e.g.:
         // "level_pct", "temperature_C", "phase", "alarm", "pump_on",
         NULL,
 };
 
-// 100 kbps line rate => 10 us/bit. FSK_PULSE_PCM with short==long==bit period.
-// reset_limit ends the packet after a run with no transition; Manchester
-// guarantees a transition at least every 2 bits, so ~100 us (10 bits) is safe
-// and still splits the two packets of an exchange (~19 ms apart) into rows.
+// 100 kbps line rate => 10 us Manchester half-bit. FSK_PULSE_MANCHESTER_ZEROBIT
+// slices on that half-bit period (short==long==10 us) and hands back the decoded
+// data bits directly. reset_limit ends the packet after a gap with no
+// transition; Manchester guarantees a transition at least every 2 half-bits, so
+// ~100 us is safe and still splits the two packets of an exchange (~19 ms apart)
+// into separate rows.
 r_device const uponor_clean1 = {
         .name        = "Uponor Clean 1 wastewater unit (nRF905, 868 MHz, 100kbps Manchester) [UNVERIFIED]",
-        .modulation  = FSK_PULSE_PCM,
+        .modulation  = FSK_PULSE_MANCHESTER_ZEROBIT,
         .short_width = UCLEAN1_BIT_US,
         .long_width  = UCLEAN1_BIT_US,
         .reset_limit = 100,
