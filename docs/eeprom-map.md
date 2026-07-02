@@ -1,6 +1,6 @@
 # M24128 (U3) EEPROM memory map
 
-Derived from a full 16 KB dump ([`clean1_eeprom.bin`](../clean1_eeprom.bin),
+Derived from a full 16 KB dump ([`dumps/u3-m24128-eeprom.bin`](../dumps/u3-m24128-eeprom.bin),
 16384 bytes) — see [docs/u3-eeprom.md](u3-eeprom.md) for how it was read.
 
 ## Summary

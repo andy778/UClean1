@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Headless Ghidra analysis of the MC9S08GT (HCS08) flash dump.
-# Imports clean1.s19 with the correct loader/processor, runs a script, throws
+# Imports dumps/u2-mc9s08gt-flash.s19 with the correct loader/processor, runs a
+# script, throws
 # the project away afterwards so runs are reproducible and stateless.
 #
 # Usage: tools/analyze.sh <ScriptName.java> [script args...]
@@ -21,7 +22,7 @@ PROJDIR="$(mktemp -d)"
 trap 'rm -rf "$PROJDIR"' EXIT
 
 "$GHIDRA/support/analyzeHeadless" "$PROJDIR" proj \
-  -import "$REPO/clean1.s19" \
+  -import "$REPO/dumps/u2-mc9s08gt-flash.s19" \
   -loader MotorolaHexLoader \
   -processor "HCS08:BE:16:MC9S08GB60" \
   -scriptPath "$REPO/tools/ghidra" \
