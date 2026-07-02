@@ -1,0 +1,2 @@
+# Raw RTL-SDR IQ captures - large binaries, kept locally only.
+*.cu8
