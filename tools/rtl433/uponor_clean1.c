@@ -60,24 +60,25 @@ Because [U5]/[U6] are open, this decoder emits the constant header plus the raw
 Manchester-decoded payload as a hex string, so captures can be correlated with
 the display. It ships disabled until the fields and CRC are pinned down.
 
-Flex-decoder equivalent for a first capture pass (raw on-air bits, Manchester by
-eye). Tune ~150 kHz low so the carrier lands off the RTL-SDR DC spike; -Y minmax
-selects the FSK peak detector (otherwise weak packets fragment) and bits>=400
-drops the noise rows (real packets are ~650 raw bits):
+Flex-decoder equivalent for a first capture pass. Tune ~150 kHz low so the
+carrier lands off the RTL-SDR DC spike; -Y minmax selects the FSK peak detector
+(otherwise the weak far-unit packet fragments). Best option - let the flex
+demodulator do the Manchester decode, so the payload comes out readable:
+  rtl_433 -f 868.20M -Y minmax \
+    -X 'n=uclean1,m=FSK_MC_ZEROBIT,s=10,r=100,bits>=200,invert'
+FSK_MC_ZEROBIT is a demod-LEVEL Manchester slicer (decodes from pulse timing),
+so s=10 is the half-bit period and the output is the DECODED bytes (~326 bits,
+half of ~650). "invert" makes it match our raw 01->1 / 10->0 convention, so the
+fd 7a ba ba ba 83 header prints verbatim. Full recall (all 8 packets of a 4-event
+replay). Its phase lock assumes a leading zero bit, so a row may be off by one
+bit - just search for fd7a as this decoder does. NOTE this is NOT the same as the
+"decode_mc" post-filter, which aborts at the first Manchester violation and only
+tries phase 0, so on these phase-offset, slightly-noisy packets it collapses to
+empty rows - that filter is unusable here, which is why this C decoder rolls its
+own tolerant, two-phase pass.
+To instead see the RAW on-air bits (Manchester still encoded, decode by eye
+01->1/10->0), use FSK_PCM at the full 100 kbps line rate:
   rtl_433 -f 868.20M -Y minmax -X 'n=uclean1,m=FSK_PCM,s=10,l=10,r=100,bits>=400'
-Optionally add ,preamble={32}55599566 to strip the leading 0xBA run and align
-every row to the fd7a header - that value is the SAME sync this decoder anchors
-on, in the raw (Manchester-encoded) domain: decoded fd 7a = 11111101 01111010,
-encode 1->01/0->10 => raw 0x5559 0x9566. But keep it OPTIONAL: the flex preamble
-is an EXACT match over all 32 raw bits, so a single noise-flipped bit in the sync
-drops the whole packet - which is why on a live capture it can miss the weaker
-(far-unit) packet of an exchange. This C decoder avoids that by Manchester-
-decoding with tolerance FIRST and only then bit-searching for fd7a, so a stray
-bit costs alignment, not the whole frame. Use bits>=400 (no preamble) when you
-want to see every message; add preamble only when you want tidy aligned rows.
-The flex "decode_mc" option is NOT usable here: it aborts at the first Manchester
-violation and only tries phase 0, so these phase-offset, slightly-noisy packets
-collapse to empty rows - which is exactly why this C decoder rolls its own pass.
 */
 
 #include "decoder.h"
