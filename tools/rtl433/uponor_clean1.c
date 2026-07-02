@@ -159,7 +159,7 @@ static int uponor_clean1_decode(r_device *decoder, bitbuffer_t *bitbuffer)
 
         /* clang-format off */
         data_t *data = data_make(
-                "model",        "",             DATA_STRING, "Uponor-Clean1",
+                "model",        "",             DATA_STRING, "Uponor-Clean-1",
                 "header",       "Header",       DATA_STRING, header_str,
                 "payload",      "Payload",      DATA_STRING, payload_str,
                 "payload_len",  "Payload bytes",DATA_INT,    (int)payload_len,
