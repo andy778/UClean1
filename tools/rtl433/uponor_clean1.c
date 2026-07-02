@@ -63,8 +63,12 @@ the display. It ships disabled until the fields and CRC are pinned down.
 Flex-decoder equivalent for a first capture pass (raw on-air bits, Manchester by
 eye). Tune ~150 kHz low so the carrier lands off the RTL-SDR DC spike; -Y minmax
 selects the FSK peak detector (otherwise weak packets fragment) and bits>=400
-drops the noise rows (real packets are ~650 raw bits):
-  rtl_433 -f 868.20M -Y minmax -X 'n=uclean1,m=FSK_PCM,s=10,l=10,r=100,bits>=400'
+drops the noise rows (real packets are ~650 raw bits). preamble is the SAME fd7a
+sync this decoder anchors on, expressed in the raw (Manchester-encoded) domain:
+decoded fd 7a = 11111101 01111010, encode 1->01/0->10 => raw 0x5559 0x9566. It
+aligns every packet to the same start (all 8 in a 4-event replay begin at fd7a):
+  rtl_433 -f 868.20M -Y minmax \
+    -X 'n=uclean1,m=FSK_PCM,s=10,l=10,r=100,bits>=400,preamble={32}55599566'
 The flex "decode_mc" option is NOT usable here: it aborts at the first Manchester
 violation and only tries phase 0, so these phase-offset, slightly-noisy packets
 collapse to empty rows - which is exactly why this C decoder rolls its own pass.
