@@ -63,12 +63,18 @@ the display. It ships disabled until the fields and CRC are pinned down.
 Flex-decoder equivalent for a first capture pass (raw on-air bits, Manchester by
 eye). Tune ~150 kHz low so the carrier lands off the RTL-SDR DC spike; -Y minmax
 selects the FSK peak detector (otherwise weak packets fragment) and bits>=400
-drops the noise rows (real packets are ~650 raw bits). preamble is the SAME fd7a
-sync this decoder anchors on, expressed in the raw (Manchester-encoded) domain:
-decoded fd 7a = 11111101 01111010, encode 1->01/0->10 => raw 0x5559 0x9566. It
-aligns every packet to the same start (all 8 in a 4-event replay begin at fd7a):
-  rtl_433 -f 868.20M -Y minmax \
-    -X 'n=uclean1,m=FSK_PCM,s=10,l=10,r=100,bits>=400,preamble={32}55599566'
+drops the noise rows (real packets are ~650 raw bits):
+  rtl_433 -f 868.20M -Y minmax -X 'n=uclean1,m=FSK_PCM,s=10,l=10,r=100,bits>=400'
+Optionally add ,preamble={32}55599566 to strip the leading 0xBA run and align
+every row to the fd7a header - that value is the SAME sync this decoder anchors
+on, in the raw (Manchester-encoded) domain: decoded fd 7a = 11111101 01111010,
+encode 1->01/0->10 => raw 0x5559 0x9566. But keep it OPTIONAL: the flex preamble
+is an EXACT match over all 32 raw bits, so a single noise-flipped bit in the sync
+drops the whole packet - which is why on a live capture it can miss the weaker
+(far-unit) packet of an exchange. This C decoder avoids that by Manchester-
+decoding with tolerance FIRST and only then bit-searching for fd7a, so a stray
+bit costs alignment, not the whole frame. Use bits>=400 (no preamble) when you
+want to see every message; add preamble only when you want tidy aligned rows.
 The flex "decode_mc" option is NOT usable here: it aborts at the first Manchester
 violation and only tries phase 0, so these phase-offset, slightly-noisy packets
 collapse to empty rows - which is exactly why this C decoder rolls its own pass.
