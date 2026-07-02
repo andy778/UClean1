@@ -84,7 +84,7 @@ reach (see "Where the data lives" below). Use the helper, which does correct
 2-byte addressing:
 
 ```bash
-tools/dump_eeprom.sh 1 clean1_eeprom.bin
+tools/dump_eeprom.sh 1 dumps/u3-m24128-eeprom.bin
 ```
 
 It prefers the kernel `at24` driver (clean binary) and falls back to chunked
@@ -94,7 +94,7 @@ It prefers the kernel `at24` driver (clean binary) and falls back to chunked
 i2ctransfer -y 1 w2@0x50 0x3a 0x9d r5     # 5 bytes at 0x3A9D
 ```
 
-Deliverable: `clean1_eeprom.bin`, exactly **16384 bytes**.
+Deliverable: `dumps/u3-m24128-eeprom.bin`, exactly **16384 bytes**.
 
 ## What the old partial dump showed
 
@@ -131,7 +131,7 @@ live records near the **top** of the chip — e.g. a 5-byte record at `0x3A9D`, 
 2-byte record at `0x3AD5`, plus stride indexed record arrays. The page-0 dump
 above misses all of it.
 
-A full 16 KB dump now exists — [`clean1_eeprom.bin`](../clean1_eeprom.bin) — and
+A full 16 KB dump now exists — [`dumps/u3-m24128-eeprom.bin`](../dumps/u3-m24128-eeprom.bin) — and
 is decoded in **[docs/eeprom-map.md](eeprom-map.md)**. The `0x3A9D` region turned
 out to be the GSM/SMS alert config (menu password + phone-number slots), and the
 `0x0000–0x05BF` block is the static cycle/phase/alarm label table. There is **no

@@ -16,7 +16,7 @@ Investigate if its possible to get Uponor Clean 1 into Home Assistant
 * From the modem port connect an ESPHOME (e.g ESP32 S3) and insert values into Home Assistant
 * It's 868.35MHz radio between inner unit and outer unit, and make decoding of this device in [rtl_433](https://github.com/merbanan/rtl_433/)  
 
-![PCB with text](uclean1.png)
+![PCB with text](docs/uclean1-pcb.png)
 
 ## Modem port / serial (Path A)
 Attempted to read the modem port directly with a laptop and a USB-to-serial cable, sweeping the common baud rates. No traffic was observed on any of them — the port appeared dead. This avenue is parked for now in favour of the flash/firmware work below (Path B).
@@ -39,12 +39,12 @@ above only reaches the first 256 bytes), and the dump analysis now live on their
 own page: **[docs/u3-eeprom.md](docs/u3-eeprom.md)**.
 
 ## Flash content
-To read out the flash content from the CPU using reader like [USBDM](https://sourceforge.net/projects/usbdm/files/) will get you and srecord [clean1.s19](clean1.s19) file. 
-This file one need to convert to binary file [clean1.bin](clean1.bin) with e.g objcopy.
+To read out the flash content from the CPU using reader like [USBDM](https://sourceforge.net/projects/usbdm/files/) will get you and srecord [dumps/u2-mc9s08gt-flash.s19](dumps/u2-mc9s08gt-flash.s19) file. 
+This file one need to convert to binary file [dumps/u2-mc9s08gt-flash.bin](dumps/u2-mc9s08gt-flash.bin) with e.g objcopy.
 
 ```
-objcopy --input-target=srec --output-target=binary clean1.s19 clean1.bin
+objcopy --input-target=srec --output-target=binary dumps/u2-mc9s08gt-flash.s19 dumps/u2-mc9s08gt-flash.bin
 ```
 
 ## Firmware analysis (Path B)
-The U2 CPU flash (`clean1.s19`) was disassembled in [Ghidra](https://ghidra-sre.org/). How the headless analysis was run, the gotchas, the recovered driver map (I2C EEPROM access layer + the SPI-slave finding that rules the radio config out of this dump), and the generated decompiler C now live on their own page: **[docs/ghidra-firmware-analysis.md](docs/ghidra-firmware-analysis.md)**.
+The U2 CPU flash (`dumps/u2-mc9s08gt-flash.s19`) was disassembled in [Ghidra](https://ghidra-sre.org/). How the headless analysis was run, the gotchas, the recovered driver map (I2C EEPROM access layer + the SPI-slave finding that rules the radio config out of this dump), and the generated decompiler C now live on their own page: **[docs/ghidra-firmware-analysis.md](docs/ghidra-firmware-analysis.md)**.

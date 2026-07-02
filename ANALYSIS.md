@@ -17,7 +17,7 @@ tools/analyze.sh DumpReport.java                       # function map + SPI/IIC 
 tools/analyze.sh DecompileCallers.java /tmp/out.txt a554 ded1   # follow a primitive outward
 ```
 
-`analyze.sh` imports `clean1.s19` with `MotorolaHexLoader` and language
+`analyze.sh` imports `dumps/u2-mc9s08gt-flash.s19` with `MotorolaHexLoader` and language
 `HCS08:BE:16:MC9S08GB60`, in a throwaway project. Set `GHIDRA_HOME` if Ghidra is
 not under `/opt/ghidra`.
 
@@ -32,7 +32,7 @@ vectors `0xFFD0-0xFFFF`, reset entry `0x807F`. ~267 functions recovered.
   writes `MOV #$CC,$28` → `SPI1C1=0xCC`, i.e. `MSTR=0`: the MC9S08 is the SPI
   **slave**. The nRF9E5's embedded 8051 is the SPI master and owns the nRF905
   `W_CONFIG` (channel/address/CRC). That config is therefore **not present in
-  `clean1.s19`** — it must come from an SDR capture or a dump of the nRF9E5's
+  `dumps/u2-mc9s08gt-flash.s19`** — it must come from an SDR capture or a dump of the nRF9E5's
   internal program memory. The `SPI1D` accesses at `0xBD5B-0xBDB1` are the
   slave's byte handling, not config setup.
 - **I2C → M24128 (U3):** bus driver `0xDED1-0xE03A`. `FUN_ded1` = start+send byte,
