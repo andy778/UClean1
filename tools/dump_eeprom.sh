@@ -8,14 +8,15 @@
 #
 # Usage: tools/dump_eeprom.sh [bus] [outfile]
 #   bus     I2C bus number (default 1)
-#   outfile output path (default clean1_eeprom.bin)
+#   outfile output path (default dumps/u3-m24128-eeprom.bin)
 #
 # Prefer the kernel at24 driver when available (gives a clean binary); fall
 # back to i2ctransfer chunked reads otherwise.
 set -euo pipefail
 
 BUS="${1:-1}"
-OUT="${2:-clean1_eeprom.bin}"
+OUT="${2:-dumps/u3-m24128-eeprom.bin}"
+mkdir -p "$(dirname "$OUT")"
 ADDR="0x50"
 SIZE=16384          # 128 Kbit = 16 KB
 CHUNK=128           # bytes per i2ctransfer read

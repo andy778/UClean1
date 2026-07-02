@@ -2,7 +2,7 @@
 
 The U2 CPU is a Freescale/NXP **MC9S08GT32** (HCS08 core). Its flash was read
 out with a [USBDM](https://sourceforge.net/projects/usbdm/files/) programmer to
-`clean1.s19`, then disassembled in [Ghidra](https://ghidra-sre.org/). This page
+`dumps/u2-mc9s08gt-flash.s19`, then disassembled in [Ghidra](https://ghidra-sre.org/). This page
 records exactly how that was done so anyone can reproduce it, and what was
 found. The raw decompiler output for the interesting drivers is checked in under
 [`docs/ghidra/`](ghidra/).
@@ -13,7 +13,7 @@ Everything runs **headless** (no GUI) through a small wrapper, so a run is
 reproducible and leaves no project behind. The tooling lives in
 [`tools/`](../tools/) (added in PR #50):
 
-- `tools/analyze.sh` — imports `clean1.s19` and runs a Ghidra script.
+- `tools/analyze.sh` — imports `dumps/u2-mc9s08gt-flash.s19` and runs a Ghidra script.
 - `tools/ghidra/DumpReport.java` — lists recovered functions + every SPI/IIC
   register access.
 - `tools/ghidra/DecompileCallers.java` — decompiles the functions containing
@@ -34,7 +34,7 @@ The exact command `analyze.sh` issues:
 
 ```bash
 "$GHIDRA/support/analyzeHeadless" "$PROJDIR" proj \
-  -import clean1.s19 \
+  -import dumps/u2-mc9s08gt-flash.s19 \
   -loader MotorolaHexLoader \
   -processor "HCS08:BE:16:MC9S08GB60" \
   -scriptPath tools/ghidra \
@@ -94,7 +94,7 @@ line), and bit 4 of that value (`MSTR`) is **0** → the MC9S08 is the SPI
 **slave**. So the nRF9E5's embedded 8051 is the SPI master and owns the nRF905
 `W_CONFIG` (channel / address / CRC).
 
-**Consequence:** the radio configuration is **not present in `clean1.s19`**.
+**Consequence:** the radio configuration is **not present in `dumps/u2-mc9s08gt-flash.s19`**.
 Recovering it needs either an SDR capture of the 868.35 MHz link or a dump of
 the nRF9E5's internal 8051 program memory. The `SPI1D` accesses around
 `0xBD5B–0xBDB1` are the slave's byte handling, not config setup.

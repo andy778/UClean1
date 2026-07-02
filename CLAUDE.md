@@ -9,16 +9,18 @@ This is a hardware reverse-engineering research project, **not** a software appl
 ## Repository contents
 
 - `README.md` — the primary working document; records the hypothesis, datasheets for each IC on the PCB, I2C memory dump analysis, and flash extraction notes.
-- `clean1.s19` — Motorola S-record dump of the CPU (MC9S08GT) flash, read out via a USBDM programmer.
-- `clean1.bin` — binary form of the above, used for analysis.
-- `uclean1.png` — annotated PCB photo referenced by the README.
+- `dumps/` — extracted chip contents, named `<designator>-<part>-<kind>`:
+  - `dumps/u2-mc9s08gt-flash.s19` — Motorola S-record dump of the U2 CPU (MC9S08GT) flash, read via a USBDM programmer.
+  - `dumps/u2-mc9s08gt-flash.bin` — binary form of the above, used for analysis.
+  - `dumps/u3-m24128-eeprom.bin` — full 16 KB dump of the U3 M24128 I2C EEPROM.
+- `docs/` — analysis write-ups (U3 EEPROM read/map, Ghidra firmware analysis) and `uclean1-pcb.png`, the annotated PCB photo.
 
 ## Working with the firmware artifacts
 
 Convert the S-record dump to a flat binary (the conversion documented in the README):
 
 ```
-objcopy --input-target=srec --output-target=binary clean1.s19 clean1.bin
+objcopy --input-target=srec --output-target=binary dumps/u2-mc9s08gt-flash.s19 dumps/u2-mc9s08gt-flash.bin
 ```
 
 The CPU is a Freescale/NXP MC9S08GT (HCS08 core). The radio link between inner and outer units is 868.35 MHz; the eventual decoding target is [rtl_433](https://github.com/merbanan/rtl_433/). The I2C EEPROM (M24128, 128-Kbit) lives at address `0x50`; in the README dump, `XX` marks bytes redacted/unknown and meaningful data appears in roughly the first ~17 bytes.
