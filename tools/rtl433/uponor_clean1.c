@@ -60,9 +60,14 @@ Because [U5]/[U6] are open, this decoder emits the constant header plus the raw
 Manchester-decoded payload as a hex string, so captures can be correlated with
 the display. It ships disabled until the fields and CRC are pinned down.
 
-Flex-decoder equivalent for a first capture pass (100 kbps, then Manchester by
-eye). Tune ~150 kHz low so the carrier lands off the RTL-SDR DC spike (see
-docs/rtl433.md): rtl_433 -f 868.20M -X 'n=uclean1,m=FSK_PCM,s=10,l=10,r=100'
+Flex-decoder equivalent for a first capture pass (raw on-air bits, Manchester by
+eye). Tune ~150 kHz low so the carrier lands off the RTL-SDR DC spike; -Y minmax
+selects the FSK peak detector (otherwise weak packets fragment) and bits>=400
+drops the noise rows (real packets are ~650 raw bits):
+  rtl_433 -f 868.20M -Y minmax -X 'n=uclean1,m=FSK_PCM,s=10,l=10,r=100,bits>=400'
+The flex "decode_mc" option is NOT usable here: it aborts at the first Manchester
+violation and only tries phase 0, so these phase-offset, slightly-noisy packets
+collapse to empty rows - which is exactly why this C decoder rolls its own pass.
 */
 
 #include "decoder.h"
