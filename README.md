@@ -28,9 +28,20 @@ Attempted to read the modem port directly with a laptop and a USB-to-serial cabl
 | U2       | CPU         | [MC9S08GT32ACFBE](https://www.nxp.com/docs/en/data-sheet/MC9S08GB60A.pdf)  |
 | U10      | Serial      | [sipex 3232](https://www.silicon-ark.co.uk/datasheets/sp3222_3232e-datasheet-sipex.pdf)   |
 | U3       | I2C Mem     | [4128BWP 8424K](https://www.st.com/en/memories/m24128-bw.html) |
-| OC13     | Optoisolator| MOC3063 1512 |
-| D11      | Mosfet      | VNE46 AC 4DLMG |
-| OC6      | Mosfet      | 1435 814 |
+| OC8–OC14 | Optoisolator| MOC3063 1512 |
+| D6–D12   | Mosfet      | VNE46 AC 4DLMG |
+| OC1–OC7  | Mosfet      | 1435 814 |
+
+The board carries a row of **seven identical output-driver channels** (the
+repeated stages that switch the magnetventiler MV1–MV5, the compressor and the
+pumps), so the designators fall into three matched series — one part per channel:
+* **D6–D12** are all the same VNE46 mosfet as D11.
+* **OC1–OC7** are all the same 1435 814 mosfet as OC6.
+* **OC8–OC14** are all the same MOC3063 optoisolator as OC13.
+
+The two OC series interleave across the row as two descending runs (…OC14, OC7,
+OC13, OC6, OC12, OC5… reading left to right), read off the high-resolution
+silkscreen in `docs/uclean1-pcb.png`.
 
 ## I2C Memory (U3, 128-Kbit / 16 KB)
 U3 is an M24128 EEPROM on the I2C bus at address `0x50`, read with a Raspberry Pi
