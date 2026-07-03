@@ -57,17 +57,24 @@ serial port is the goal of Path A.
 ## Hardware access — J5 "Modem" header
 
 The board has a header **J5**, silk-labeled **"Modem"**, sitting next to U10
-(SP3232) and U13. It is a **5 V TTL** modem-module header (multimeter mapped,
-diode/continuity + powered voltage check), *not* an RS-232 port — so a plain
-USB-UART reaches it directly, no MAX3232 needed. Pinout (top → bottom):
+(SP3232) and U13. It is a **2×5 (10-pin)** right-angle header at **5 V TTL**
+(multimeter mapped, diode/continuity + powered voltage check), *not* an RS-232
+port — so a plain USB-UART reaches it directly, no MAX3232 needed.
 
-| J5 pin | label | notes |
-| ---    | ---   | ---   |
-| 1 | **5V**  | power **output** (reads ~5.0 V to GND with board powered); feeds the modem module — **do not** drive it from a USB-UART |
-| 2 | *(unlabeled)* | 5th pin, function TBD (2nd GND / RING / power-key?) |
-| 3 | **RX**  | serial |
-| 4 | **TX**  | serial |
-| 5 | **GND** | ground |
+Four signals are mapped so far (on the edge row):
+
+| signal | notes |
+| ---    | ---   |
+| **5V**  | power **output** (reads ~5.0 V to GND with board powered); feeds the modem module — **do not** drive it from a USB-UART |
+| **RX**  | serial |
+| **TX**  | serial |
+| **GND** | ground |
+
+The remaining six pins are not yet mapped. A 2×5 modem interface most likely
+carries the hardware-handshake lines (RTS/CTS/DTR/DSR/DCD/RI) — though the
+firmware disables flow control (`AT+IFC=0,0`), so only power + RX/TX/GND are
+needed to talk to it. RING (RI) is a plausible incoming-SMS wake line worth
+identifying.
 
 The board logic is **5 V** (the 5V pin reads ~5.0 V; a UART line idles high at the
 logic rail). RX/TX are labeled by hand and their perspective (host vs. module) is
@@ -95,16 +102,16 @@ firmware's `CODE RS` command — i.e. **SCI2 → J5 (TTL) → modem**, while
 
 **Tier 1 — static (done).** The three firmware findings above.
 
-**Tier 2 — passive scope (decisive, ~5 min).** Logic analyzer / USB-UART on
-**J5 pins 3 and 4** (RX/TX), **9600 8N1**, GND to J5 pin 5, then power-cycle the
+**Tier 2 — passive scope (decisive, ~5 min).** Logic analyzer / USB-UART on the
+**J5 RX/TX pins**, **9600 8N1**, GND to the J5 GND pin, then power-cycle the
 board. Prediction: a burst of printable ASCII — `ATE0`, `AT+CPIN?`,
 `AT+CREG?`… The pin that bursts is U2's transmit (that also resolves the RX/TX
 labels).
 
 **Tier 3 — fake modem, no SIM (strongest bench proof).** Cross-connect a USB-UART
 to J5 (adapter **RX ← J5 TX** = the bursting pin, adapter **TX → J5 RX**, GND to
-J5 pin 5, **5V pin left unconnected**; mind the 5 V level cautions above) and run
-[`tools/fake_telit.py`](../tools/fake_telit.py):
+the J5 GND pin, **5V pin left unconnected**; mind the 5 V level cautions above)
+and run [`tools/fake_telit.py`](../tools/fake_telit.py):
 
 ```
 python3 tools/fake_telit.py --port /dev/ttyUSB0
