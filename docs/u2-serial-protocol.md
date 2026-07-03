@@ -54,40 +54,56 @@ The stored placeholders are non-secret defaults (`PASS`, `+358000000000`).
 `CYCLE COUNTER:` is exactly the display's *satsräknare* — reaching it over the
 serial port is the goal of Path A.
 
-## Hardware access
+## Hardware access — J5 "Modem" header
 
-The port is RS-232 via **U10 (SP3232)**, a 2-channel RS-232 transceiver. To reach
-SCI2 you tap the **TTL side** at the SP3232 (the connector side is ±RS-232 and
-will fry a 3.3 V UART):
+The board has a header **J5**, silk-labeled **"Modem"**, sitting next to U10
+(SP3232) and U13. It is a **5 V TTL** modem-module header (multimeter mapped,
+diode/continuity + powered voltage check), *not* an RS-232 port — so a plain
+USB-UART reaches it directly, no MAX3232 needed. Pinout (top → bottom):
 
-| SP3232 pin | signal | direction |
-| ---        | ---    | ---       |
-| 11 `T1IN`  | TTL in  | from a U2 TxD |
-| 10 `T2IN`  | TTL in  | from a U2 TxD |
-| 12 `R1OUT` | TTL out | to a U2 RxD |
-|  9 `R2OUT` | TTL out | to a U2 RxD |
-| 14 `T1OUT` / 7 `T2OUT` | RS-232 out | to the connector |
-| 13 `R1IN` / 8 `R2IN`   | RS-232 in  | from the connector |
+| J5 pin | label | notes |
+| ---    | ---   | ---   |
+| 1 | **5V**  | power **output** (reads ~5.0 V to GND with board powered); feeds the modem module — **do not** drive it from a USB-UART |
+| 2 | *(unlabeled)* | 5th pin, function TBD (2nd GND / RING / power-key?) |
+| 3 | **RX**  | serial |
+| 4 | **TX**  | serial |
+| 5 | **GND** | ground |
 
-Which SP3232 channel is SCI2 is not yet traced — identify it empirically in
-tier 2 below (the one emitting 9600-baud `AT…` text at power-up).
+The board logic is **5 V** (the 5V pin reads ~5.0 V; a UART line idles high at the
+logic rail). RX/TX are labeled by hand and their perspective (host vs. module) is
+not yet pinned down — tier 2 below resolves it: the pin that *bursts* `AT…` at
+power-up is U2's transmit.
+
+This also places U10/SP3232 on a **separate** RS-232 service port, matching the
+firmware's `CODE RS` command — i.e. **SCI2 → J5 (TTL) → modem**, while
+**SCI1 → SP3232 → RS-232 service connector** carries the local `CODE …` interface.
 
 > The earlier Path-A attempt ("port appeared dead, swept common bauds") is
-> explained by this thesis: with no modem attached U2 mostly stays quiet, and a
-> TTL adapter on the RS-232 connector (or on U2's RxD, where only the *modem*
-> would talk) sees nothing. Listen on the **TxD/TTL** side instead.
+> explained by this: with no modem attached U2 mostly stays quiet, and probing
+> the wrong pin/direction (or the SP3232 RS-232 service port) sees nothing. Listen
+> on **J5 TX** at power-up instead.
+
+### Level / wiring cautions (5 V TTL)
+- **Never connect a USB-UART's VCC to J5 pin 1.** It is a board output; only wire
+  **GND + the two data lines**.
+- If your adapter is 3.3 V: its 3.3 V TX into a 5 V input reads as a valid high,
+  but protect its RX against the 5 V TX (series resistor / divider). A 5 V-capable
+  adapter avoids the issue.
+- Common ground between adapter and board.
 
 ## Verification plan
 
 **Tier 1 — static (done).** The three firmware findings above.
 
-**Tier 2 — passive scope (decisive, ~5 min).** Logic analyzer / 3.3 V USB-UART on
-SP3232 `T1IN` (pin 11) and `T2IN` (pin 10), **9600 8N1**, then power-cycle the
+**Tier 2 — passive scope (decisive, ~5 min).** Logic analyzer / USB-UART on
+**J5 pins 3 and 4** (RX/TX), **9600 8N1**, GND to J5 pin 5, then power-cycle the
 board. Prediction: a burst of printable ASCII — `ATE0`, `AT+CPIN?`,
-`AT+CREG?`… Seeing it on one pin confirms the thesis and identifies SCI2.
+`AT+CREG?`… The pin that bursts is U2's transmit (that also resolves the RX/TX
+labels).
 
-**Tier 3 — fake modem, no SIM (strongest bench proof).** Cross-connect a 3.3 V
-USB-UART to that SCI2 pair (TX↔RX, common ground) and run
+**Tier 3 — fake modem, no SIM (strongest bench proof).** Cross-connect a USB-UART
+to J5 (adapter **RX ← J5 TX** = the bursting pin, adapter **TX → J5 RX**, GND to
+J5 pin 5, **5V pin left unconnected**; mind the 5 V level cautions above) and run
 [`tools/fake_telit.py`](../tools/fake_telit.py):
 
 ```
