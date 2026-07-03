@@ -18,6 +18,24 @@ Investigate if its possible to get Uponor Clean 1 into Home Assistant
 
 ![PCB with text](docs/uclean1-pcb.png)
 
+## Two boards (dump vs. radio provenance)
+This project uses **two physical Clean 1 boards**, and it matters which artifact
+came from which:
+* **Board A** — the original, retired after **OC13** (a MOC3063 output-driver
+  optotriac, one of the OC8–OC14 channels) failed. **All firmware and memory
+  dumps in [`dumps/`](dumps/) were read from board A** (`u2-mc9s08gt-flash.*`,
+  `u3-m24128-eeprom.bin`). OC13 is only an output stage, so its CPU / serial /
+  EEPROM / radio are intact — board A is the safe **bench mule**.
+* **Board B** — the new **active replacement**, currently installed. **All
+  868 MHz `rtl_433` radio captures come from board B**, as does the display's
+  cycle counter (*satsräknare*).
+
+So firmware/EEPROM analysis describes **board A** and on-air behaviour describes
+**board B**. They are the same model but not guaranteed byte-identical — the
+EEPROM config (code + phone numbers) and the counter differ per board, and the
+radios may be individually paired. Confirm `SW Ver:` / `Proc Ver:` match on both
+before using board-A firmware to explain board-B radio.
+
 ## Modem port / serial (Path A)
 Attempted to read the modem port directly with a laptop and a USB-to-serial cable, sweeping the common baud rates. No traffic was observed on any of them — the port appeared dead. This avenue is parked for now in favour of the flash/firmware work below (Path B).
 

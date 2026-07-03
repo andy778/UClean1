@@ -6,6 +6,10 @@ I2C bus at address **`0x50`** and holds the firmware's config + telemetry
 records. This page covers how to wire it to a Raspberry Pi, how to read it, and
 what we have found so far.
 
+> This dump is from **board A** (the retired original) — see the two-boards note
+> in the [README](../README.md). Board B (the live unit) will hold different
+> config.
+
 ## Wiring the Raspberry Pi to U3
 
 The M24128 is an 8-pin device (SO8/DIP8). Standard pinout:
