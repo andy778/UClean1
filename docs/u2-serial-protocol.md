@@ -57,61 +57,78 @@ serial port is the goal of Path A.
 ## Hardware access — J5 "Modem" header
 
 The board has a header **J5**, silk-labeled **"Modem"**, sitting next to U10
-(SP3232) and U13. It is a **2×5 (10-pin)** right-angle header at **5 V TTL**
-(multimeter mapped, diode/continuity + powered voltage check), *not* an RS-232
-port — so a plain USB-UART reaches it directly, no MAX3232 needed.
+(SP3232) and U13. It is a **2×5 (10-pin)** right-angle header. Tracing it out
+with a multimeter (diode/continuity), **only two of its pins (2 & 3) run to
+U10/SP3232**; the rest are mostly **GND**, plus (probably) a **5 V feed** for the
+modem module — pin still to be confirmed (see below). Because those two data lines
+come *through* the SP3232, **J5 is an RS-232 port (±V levels), not TTL** — the
+SP3232 is the modem's line transceiver, not a separate service connector.
 
-Four signals are mapped so far (on the edge row):
+Pin numbering: **pin 1** is the corner marked by the silkscreen **white
+triangle**, next to capacitor **C40**. Traced pins:
 
-| signal | notes |
-| ---    | ---   |
-| **5V**  | power **output** (reads ~5.0 V to GND with board powered); feeds the modem module — **do not** drive it from a USB-UART |
-| **RX**  | serial |
-| **TX**  | serial |
-| **GND** | ground |
+| J5 pin | goes to | SP3232 function | meaning |
+| --- | --- | --- | --- |
+| 1   | — | (triangle marker, by C40) | silkscreen ▶ reference corner |
+| 2   | SP3232 **std pin 13** | **R1IN** (ch-1 RS-232 receiver input) | data **from modem** → board = board's **RX** |
+| 3   | SP3232 **std pin 14** | **T1OUT** (ch-1 RS-232 driver output) | data **to modem** ← board = board's **TX** |
+| 5   | — | — | **GND** |
 
-The remaining six pins are not yet mapped. A 2×5 modem interface most likely
-carries the hardware-handshake lines (RTS/CTS/DTR/DSR/DCD/RI) — though the
-firmware disables flow control (`AT+IFC=0,0`), so only power + RX/TX/GND are
-needed to talk to it. RING (RI) is a plausible incoming-SMS wake line worth
-identifying.
+> **SP3232 pin count is reversed from the datasheet.** The traces read as
+> SP3232 "pin 4"/"pin 3" when counted from one end, but those are charge-pump
+> capacitor pins — nonsense for a connector. Counted from the other end
+> (std pin = 17 − n) they land on **std 13/14 = R1IN/T1OUT**, the channel-1
+> RS-232 data pair, which is exactly right. So J5 pins 2 & 3 are the RS-232
+> RX/TX going through SP3232 channel 1.
 
-The board logic is **5 V** (the 5V pin reads ~5.0 V; a UART line idles high at the
-logic rail). RX/TX are labeled by hand and their perspective (host vs. module) is
-not yet pinned down — tier 2 below resolves it: the pin that *bursts* `AT…` at
-power-up is U2's transmit.
+> **Open: the 5 V feed.** An earlier multimeter reading put ~5 V on pin 3, but
+> pin 3 = T1OUT is a driver *output* that idles at the RS-232 **negative** rail —
+> it can't be a 5 V supply. Re-measure pin 3 to GND (expect negative when idle,
+> which also confirms it's the board TX); the actual modem 5 V feed is a
+> different pin (7 or 9) still to be traced.
 
-This also places U10/SP3232 on a **separate** RS-232 service port, matching the
-firmware's `CODE RS` command — i.e. **SCI2 → J5 (TTL) → modem**, while
-**SCI1 → SP3232 → RS-232 service connector** carries the local `CODE …` interface.
+The two data pins (J5 2 & 3) are one SP3232 driver + receiver pair (RXD/TXD); the
+firmware disables flow control (`AT+IFC=0,0`), so no handshake lines are wired
+out — which fits "only two lines from the SP3232, rest GND." SP3232 is a **dual**
+transceiver, so its second channel is the likely home of the local `CODE RS`
+service port (SCI1).
+
+Topology: **U2 SCI2 → U10/SP3232 → J5 (RS-232) → modem**. SCI2's 9600 8N1 (found
+statically above) is the modem UART; the SP3232 shifts it to RS-232 for the Telit
+module.
 
 > The earlier Path-A attempt ("port appeared dead, swept common bauds") is
-> explained by this: with no modem attached U2 mostly stays quiet, and probing
-> the wrong pin/direction (or the SP3232 RS-232 service port) sees nothing. Listen
-> on **J5 TX** at power-up instead.
+> consistent with this: with no modem attached U2 mostly stays quiet, and a plain
+> USB-UART on the J5 data pins sees **inverted RS-232**, not TTL, so nothing
+> decodes. Use an RS-232-level adapter on J5, or tap the SP3232 **TTL side**
+> instead (below).
 
-### Level / wiring cautions (5 V TTL)
-- **Never connect a USB-UART's VCC to J5 pin 1.** It is a board output; only wire
-  **GND + the two data lines**.
-- If your adapter is 3.3 V: its 3.3 V TX into a 5 V input reads as a valid high,
-  but protect its RX against the 5 V TX (series resistor / divider). A 5 V-capable
-  adapter avoids the issue.
-- Common ground between adapter and board.
+### Where to tap — J5 (RS-232) vs. SP3232 TTL side
+A bare TTL USB-UART / logic analyzer will **not** decode the J5 data pins (they
+are ±RS-232). Two options:
+
+- **On J5**: use an RS-232-level adapter (a MAX3232/USB-RS232 cable), GND to a J5
+  GND pin, **5 V pin left unconnected**.
+- **On the SP3232 TTL side (recommended for bench work)**: probe the logic-level
+  pins of U10 — the driver input (T_IN = U2 SCI2 TX) and receiver output
+  (R_OUT = U2 SCI2 RX) — at **5 V TTL**, which a plain USB-UART / logic analyzer
+  reads directly. Common ground to the board.
 
 ## Verification plan
 
 **Tier 1 — static (done).** The three firmware findings above.
 
-**Tier 2 — passive scope (decisive, ~5 min).** Logic analyzer / USB-UART on the
-**J5 RX/TX pins**, **9600 8N1**, GND to the J5 GND pin, then power-cycle the
-board. Prediction: a burst of printable ASCII — `ATE0`, `AT+CPIN?`,
-`AT+CREG?`… The pin that bursts is U2's transmit (that also resolves the RX/TX
-labels).
+**Tier 2 — passive scope (decisive, ~5 min).** Probe at **9600 8N1**, then
+power-cycle the board. Use a logic analyzer / plain USB-UART on the **SP3232 TTL
+side** (U2 SCI2 TX = the driver input pin), or an **RS-232-level** adapter on the
+J5 data pins. Prediction: a burst of printable ASCII — `ATE0`, `AT+CPIN?`,
+`AT+CREG?`… The pin that bursts is U2's transmit.
 
-**Tier 3 — fake modem, no SIM (strongest bench proof).** Cross-connect a USB-UART
-to J5 (adapter **RX ← J5 TX** = the bursting pin, adapter **TX → J5 RX**, GND to
-the J5 GND pin, **5V pin left unconnected**; mind the 5 V level cautions above)
-and run [`tools/fake_telit.py`](../tools/fake_telit.py):
+**Tier 3 — fake modem, no SIM (strongest bench proof).** Cross-connect to the
+serial line — either an **RS-232 adapter on J5**, or (simpler) a plain USB-UART on
+the **SP3232 TTL side** (adapter **RX ← U2 SCI2 TX**, adapter **TX → U2 SCI2 RX**,
+common GND, **J5 5V pin left unconnected**) — and run
+[`tools/fake_telit.py`](../tools/fake_telit.py):
 
 ```
 python3 tools/fake_telit.py --port /dev/ttyUSB0
