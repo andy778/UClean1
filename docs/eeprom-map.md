@@ -3,6 +3,11 @@
 Derived from a full 16 KB dump ([`dumps/u3-m24128-eeprom.bin`](../dumps/u3-m24128-eeprom.bin),
 16384 bytes) — see [docs/u3-eeprom.md](u3-eeprom.md) for how it was read.
 
+> **Provenance:** this dump is from **board A** (the retired original, OC13
+> output-driver fault), not the live unit — see the two-boards note in the
+> [README](../README.md). So the config below (`PASS`, phone slots) is board A's,
+> and the display counter on the live board B is **not** in this dump.
+
 ## Summary
 
 Only two regions of the 16 KB are populated; everything else is erased
@@ -11,7 +16,7 @@ Only two regions of the 16 KB are populated; everything else is erased
 | Range           | Contents                                            |
 | ---             | ---                                                 |
 | `0x0000–0x05BF` | Static program table: header params, cycle/phase definitions + labels, alarm text, actuator-event timings |
-| `0x3A94–0x3AD6` | Live config: menu password + 3 GSM/SMS phone slots + trailing bytes |
+| `0x3A98–0x3AD6` | Live config: menu password + 3 GSM/SMS phone slots + trailing bytes |
 
 **Important for Home Assistant:** there is **no live telemetry** (water level,
 temperature, current phase, timers) stored in the EEPROM. Those are transient
@@ -20,13 +25,13 @@ and live in CPU RAM / are carried over the 868 MHz radio. The EEPROM holds the
 for **decoding/labelling** what the radio carries (phase names, alarm codes),
 not as a data source on its own.
 
-## `0x3A94–0x3AD6` — live config (GSM/SMS alerting)
+## `0x3A98–0x3AD6` — live config (GSM/SMS alerting)
 
 This region matches the firmware's typed read wrappers exactly (see the Ghidra
 analysis: `FUN_a554` + 5-byte / 16-byte / 2-byte wrappers).
 
 ```
-3a94: 00 00 00 08 01                                  header/flags
+3a98: 00 00 00 08 01                                  header/flags
 3a9d: 50 41 53 53 00                "PASS\0"           menu password (5-byte record)
 3aa2: 01 00 00                                         flags/count
 3aa5: 2b 33 35 38 30 30 30 30 30 30 30 30 30  "+358000000000"  phone slot 0  (16-byte stride)
@@ -38,9 +43,10 @@ analysis: `FUN_a554` + 5-byte / 16-byte / 2-byte wrappers).
 - **Password** `PASS` and all three **phone numbers** (`+358…`, Finland) are
   factory **placeholders / unconfigured** — no real credentials in this dump.
 - The unit sends **SMS alerts** to these numbers (the alarm strings below are
-  the message texts). This confirms the "modem port" is a GSM modem, and
-  explains why the serial tap (Path A) was silent — alerting is over the
-  cellular link, not that port.
+  the message texts). This confirms the "modem port" is a GSM link. The port
+  itself is the **J5 "Modem" header** (5 V TTL, on U2's SCI2 at 9600) — the
+  reason the first serial tap looked dead, and how to talk to it, are in
+  [docs/u2-serial-protocol.md](u2-serial-protocol.md).
 
 ## `0x0000–0x05BF` — static program table
 
