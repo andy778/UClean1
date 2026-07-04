@@ -26,6 +26,9 @@ sent if the unit's REPLY setting is ON.
 Usage:
     python3 fake_telit.py --port /dev/ttyUSB0                     # Enter injects PASS
     python3 fake_telit.py --port /dev/ttyUSB0 --inject "PASS CONF"  # dump config
+    python3 fake_telit.py --port /dev/ttyUSB0 --sweep            # auto-try every
+        candidate command and print which ones U2 answers (add --include-reset to
+        also try the destructive '<CODE> RS').
 
 Press Enter at the console (after the AT handshake starts) to inject the --inject
 text as a new incoming SMS, so U2 issues AT+CMGR, then AT+CMGS with its reply.
@@ -53,6 +56,8 @@ class FakeTelit:
         self.inject_text = inject_text
         self.have_injected_msg = False  # a pending "stored" incoming SMS at index 1
         self.seen_at = False            # U2 has completed at least one AT<->OK
+        self.reply_event = threading.Event()  # set when an AT+CMGS body is captured
+        self.last_reply = None                # bytes of the most recent captured body
 
     def send(self, text):
         """Send a Telit-style response line (framed with CRLF like a real modem)."""
@@ -84,6 +89,8 @@ class FakeTelit:
             print(f"[{ts()}] *** CAPTURED OUTGOING SMS BODY (telemetry) ***")
             print(body.decode(errors="replace"))
             print("=" * 60)
+            self.last_reply = body          # hand it to a waiting --sweep, if any
+            self.reply_event.set()
             self.send("+CMGS: 1")
             self.ok()
             return
@@ -157,6 +164,50 @@ class FakeTelit:
             else:
                 line += b
 
+    def inject_once(self, text):
+        """Queue `text` as a new incoming SMS and nudge U2 to read it (+CMTI)."""
+        self.inject_text = text
+        self.reply_event.clear()
+        self.last_reply = None
+        self.have_injected_msg = True
+        self.send('+CMTI: "SM",1')
+
+    def sweep(self, commands, timeout=25.0, settle=2.0):
+        """Auto-try each candidate command, recording which ones U2 answers.
+
+        For each command: deliver it as an SMS, wait up to `timeout` for U2 to
+        reply via AT+CMGS (captured in handle()), then pause `settle` s so U2 can
+        delete the message and return to idle before the next one. A late reply
+        that lands in the next command's window is possible — treat a lone hit
+        near a boundary with suspicion and re-run it singly with --inject.
+        """
+        waited = 0.0
+        while not self.seen_at and waited < 60.0:
+            time.sleep(0.5); waited += 0.5
+        if not self.seen_at:
+            print(f"[{ts()}] WARNING: no AT handshake seen in 60 s — sweeping anyway")
+
+        results = []
+        for cmd in commands:
+            print(f"[{ts()}] SWEEP -> {cmd!r}  (waiting up to {timeout:.0f} s)")
+            self.inject_once(cmd)
+            got = self.reply_event.wait(timeout)
+            body = self.last_reply if got else None
+            results.append((cmd, body))
+            print(f"[{ts()}] SWEEP <- {cmd!r} "
+                  + (f"REPLIED ({len(body)} B)" if got else "no reply"))
+            time.sleep(settle)
+
+        print("\n" + "=" * 60 + "\nSWEEP SUMMARY\n" + "=" * 60)
+        for cmd, body in results:
+            if body is None:
+                print(f"  {cmd!r:16}  (no reply)")
+            else:
+                print(f"  {cmd!r:16}  REPLY:")
+                for ln in body.decode(errors="replace").splitlines():
+                    print(f"      {ln}")
+        return results
+
     def console_loop(self):
         for _ in sys.stdin:
             if not self.seen_at:
@@ -170,6 +221,23 @@ class FakeTelit:
             print(f"[{ts()}] queued injected SMS {self.inject_text!r}; sent +CMTI")
 
 
+def build_sweep(code, include_reset):
+    """Candidate SMS commands to try in --sweep, most-likely first.
+
+    Firmware grammar: `<CODE>` (status) / `<CODE> CONF` / `<CODE> CONF ?` /
+    `<CODE> RS`, where <CODE> is the 4-char access code (board A: PASS). We also
+    try the literal word CODE as a fallback in case the stored code differs. RS
+    resets the config to defaults, so it is opt-in via --include-reset.
+    """
+    verbs = ["", " CONF", " CONF ?"]
+    cmds = [code + v for v in verbs]
+    if code.upper() != "CODE":
+        cmds += ["CODE" + v for v in verbs]  # literal-keyword fallback
+    if include_reset:
+        cmds.append(code + " RS")
+    return cmds
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", required=True, help="e.g. /dev/ttyUSB0")
@@ -178,16 +246,29 @@ def main():
                     help="incoming-SMS text sent on Enter. Default 'PASS' = board "
                          "A's 4-char access code -> plant status. Try 'PASS CONF' "
                          "for config. (No 'STATUS' verb exists; send the bare code.)")
+    ap.add_argument("--code", default="PASS",
+                    help="the unit's 4-char access code for --sweep (board A: PASS)")
+    ap.add_argument("--sweep", action="store_true",
+                    help="auto-try candidate commands, report which U2 answers, exit")
+    ap.add_argument("--include-reset", action="store_true",
+                    help="also try the destructive '<CODE> RS' (reset) in --sweep")
+    ap.add_argument("--sweep-timeout", type=float, default=25.0,
+                    help="seconds to wait for a reply per swept command")
     args = ap.parse_args()
 
     ser = serial.Serial(args.port, args.baud, bytesize=8, parity="N",
                         stopbits=1, timeout=0.2)
     print(f"[{ts()}] fake Telit on {args.port} @ {args.baud} 8N1")
-    print("Press Enter to inject an incoming command SMS. Ctrl-C to quit.")
     ft = FakeTelit(ser, args.inject)
     threading.Thread(target=ft.reader_loop, daemon=True).start()
     try:
-        ft.console_loop()
+        if args.sweep:
+            cmds = build_sweep(args.code, args.include_reset)
+            print(f"[{ts()}] SWEEP mode: {len(cmds)} commands -> {cmds}")
+            ft.sweep(cmds, timeout=args.sweep_timeout)
+        else:
+            print("Press Enter to inject an incoming command SMS. Ctrl-C to quit.")
+            ft.console_loop()
     except KeyboardInterrupt:
         pass
 
