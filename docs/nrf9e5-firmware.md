@@ -70,6 +70,90 @@ the nRF9E5's **SCK / MOSI / MISO / EECSN** pins, power-cycle, and capture the
 boot sequence. Reconstruct the 8051 image from the SPI transaction — and as a
 side effect you learn which chip sourced it.
 
+## Bench setup — wiring & software
+
+### Step 0 — identify the pins (both methods)
+
+The boot memory is almost certainly a standard **25-series SPI EEPROM/flash** in
+an 8-pin SOIC, which has a fixed pinout — so once you find the chip you know its
+pins:
+
+| SOIC pin | 25-series name | Role                     |
+| ---      | ---            | ---                      |
+| 1        | CS#            | chip select (= `EECSN`)  |
+| 2        | SO / MISO      | data **out** (the code)  |
+| 3        | WP#            | write-protect → tie 3V3  |
+| 4        | VSS            | GND                      |
+| 5        | SI / MOSI      | data **in** (cmd/addr)   |
+| 6        | SCK            | clock                    |
+| 7        | HOLD#          | → tie 3V3                |
+| 8        | VCC            | **3.3 V** supply         |
+
+Power **off**, on continuity/diode mode confirm pins 1/2/5/6 reach the nRF9E5's
+`EECSN` / `MISO` / `MOSI` / `SCK`. If they instead land on the MC9S08's SDA/SCL,
+that SOIC is just U3 (I2C) — method 2 still finds the real one.
+
+> ⚠️ This is a **3.3 V** part — never put 5 V on it. Many CH341A programmers ship
+> at 5 V; use a 3.3 V-modified one (or a level shifter), or you will damage the
+> chip and back-feed the board.
+
+### Method 2 — logic-analyzer sniff (recommended, no desolder)
+
+Kit: any cheap 8-channel logic analyzer (an FX2 "Saleae clone", ~US$10) plus
+**[PulseView / sigrok](https://sigrok.org/)** (free) or Saleae Logic.
+
+Five clip leads (probe at the memory pins, or the same nets at the nRF9E5):
+
+| LA channel | Signal          | 25-series pin |
+| ---        | ---             | ---           |
+| D0         | CS# / `EECSN`   | 1             |
+| D1         | SCK             | 6             |
+| D2         | MOSI (cmd/addr) | 5             |
+| D3         | MISO (the code) | 2             |
+| GND        | board GND       | 4             |
+
+Capture:
+1. Sample at **≥ 24 MS/s** (≥ 4× the SPI clock; a clone's ~24 MS/s is plenty for a
+   boot clock of a few MHz).
+2. Trigger on **D0 (CS#) falling edge**, arm the capture.
+3. **Power-cycle the board.** At reset the nRF9E5 masters the bus and streams the
+   **entire** ≤ 4 KB image in exactly once.
+4. Add sigrok's **SPI decoder** (CS = D0 active-low, CLK = D1, MOSI = D2,
+   MISO = D3; try **mode 0** = CPOL 0 / CPHA 0 first). The loader sends a read
+   opcode (`0x03`) + address on MOSI, then the memory returns the image on
+   **MISO** — export that MISO byte stream to `dumps/u1-nrf9e5-8051.bin`.
+
+### Method 1 — direct read with an SPI programmer
+
+Kit: a **CH341A** USB programmer (3.3 V!) with a SOIC-8 test clip, or a Raspberry
+Pi on `spidev`, plus **[flashrom](https://www.flashrom.org/)**.
+
+The chip shares the bus with the nRF9E5, so keep the nRF9E5 from driving it:
+- **best:** desolder the SOIC and read it in the clip / on a breadboard, or
+- clip it in place **with the board unpowered** (and the nRF9E5 held in reset).
+
+Wire the clip to the 25-series pinout above:
+
+| Programmer | → 25-series pin              |
+| ---        | ---                          |
+| CS         | 1 CS#                        |
+| MISO / DO  | 2 SO                         |
+| 3V3        | 8 VCC, plus 3 WP# and 7 HOLD# |
+| GND        | 4 VSS                        |
+| MOSI / DI  | 5 SI                         |
+| CLK        | 6 SCK                        |
+
+Read it:
+
+```bash
+flashrom -p ch341a_spi -r dumps/u1-nrf9e5-8051.bin           # CH341A
+# or on a Raspberry Pi:
+flashrom -p linux_spi:dev=/dev/spidev0.0,spispeed=1000 -r dumps/u1-nrf9e5-8051.bin
+```
+
+If flashrom can't auto-detect it, pass `-c <model>` (see `flashrom -L`) or read it
+as a generic 25xx part. The image is ≤ 4 KB (the 8051's RAM size).
+
 ## After you have the image
 
 The dump is **8051 machine code**. Disassemble it in Ghidra (it ships an 8051
