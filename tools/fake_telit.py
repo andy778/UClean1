@@ -20,8 +20,10 @@ SMS command grammar (from the firmware help strings, verbatim):
     <CODE> RS       -> "Back to the default settings"
 where <CODE> is the unit's 4-character access code (firmware: "CODE: 4 char").
 On board A that code is `PASS` (dumped from the U3 EEPROM at 0x3A9D). There is
-NO "STATUS" verb — send the bare 4-char code to get plant status. A reply is only
-sent if the unit's REPLY setting is ON.
+NO "STATUS" verb — send the bare 4-char code to get plant status. Two more EEPROM
+facts gate a reply: U2 accepts commands only from a stored number (PHONE1-3 =
++358000000000 on board A; set with --from), and it only replies if REPLY is ON
+(header byte 0x01 at 0x3A98 suggests ON — confirm with '<CODE> CONF').
 
 Usage:
     python3 fake_telit.py --port /dev/ttyUSB0                     # Enter injects PASS
@@ -51,9 +53,14 @@ def ts():
 
 
 class FakeTelit:
-    def __init__(self, ser, inject_text):
+    def __init__(self, ser, inject_text, origin="+358000000000"):
         self.ser = ser
         self.inject_text = inject_text
+        # Sender of the injected SMS. U2 only accepts commands from a stored
+        # number (EEPROM PHONE1-3); on board A those are all +358000000000, so
+        # that is the default. If it does not match a stored slot, U2 reads and
+        # deletes the message but never replies — the exact silent-drop we saw.
+        self.origin = origin
         self.have_injected_msg = False  # a pending "stored" incoming SMS at index 1
         self.seen_at = False            # U2 has completed at least one AT<->OK
         self.reply_event = threading.Event()  # set when an AT+CMGS body is captured
@@ -99,7 +106,7 @@ class FakeTelit:
         if c.startswith("AT+CMGR"):
             if self.have_injected_msg:
                 # +CMGR: <stat>,<oa>,,<scts>  then the text  then OK
-                self.send('+CMGR: "REC UNREAD","+358000000000",,"'
+                self.send(f'+CMGR: "REC UNREAD","{self.origin}",,"'
                           '00/01/01,00:00:00+00"')
                 self.ser.write(self.inject_text.encode() + CRLF)
                 print(f"[{ts()}] TX-> injected SMS text {self.inject_text!r}")
@@ -121,7 +128,7 @@ class FakeTelit:
         if c.startswith("AT+CMGL"):
             # list messages: pretend none unless one injected
             if self.have_injected_msg:
-                self.send('+CMGL: 1,"REC UNREAD","+358000000000",,')
+                self.send(f'+CMGL: 1,"REC UNREAD","{self.origin}",,')
                 self.ser.write(self.inject_text.encode() + CRLF)
                 self.have_injected_msg = False
             self.ok(); return
@@ -254,12 +261,15 @@ def main():
                     help="also try the destructive '<CODE> RS' (reset) in --sweep")
     ap.add_argument("--sweep-timeout", type=float, default=25.0,
                     help="seconds to wait for a reply per swept command")
+    ap.add_argument("--from", dest="origin", default="+358000000000",
+                    help="sender number for injected SMS; must match a stored "
+                         "PHONE1-3 (EEPROM: +358000000000 on board A)")
     args = ap.parse_args()
 
     ser = serial.Serial(args.port, args.baud, bytesize=8, parity="N",
                         stopbits=1, timeout=0.2)
     print(f"[{ts()}] fake Telit on {args.port} @ {args.baud} 8N1")
-    ft = FakeTelit(ser, args.inject)
+    ft = FakeTelit(ser, args.inject, origin=args.origin)
     threading.Thread(target=ft.reader_loop, daemon=True).start()
     try:
         if args.sweep:
