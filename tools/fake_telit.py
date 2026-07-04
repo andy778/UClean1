@@ -41,6 +41,7 @@ class FakeTelit:
         self.ser = ser
         self.inject_text = inject_text
         self.have_injected_msg = False  # a pending "stored" incoming SMS at index 1
+        self.seen_at = False            # U2 has completed at least one AT<->OK
 
     def send(self, text):
         """Send a Telit-style response line (framed with CRLF like a real modem)."""
@@ -54,6 +55,13 @@ class FakeTelit:
     def handle(self, cmd):
         print(f"[{ts()}] <-RX {cmd!r}")
         c = cmd.strip().upper()
+        # U2 prefixes its AT lines with ESC (0x1b) to flush the modem to a known
+        # state, and a noisy line-start can prepend stray bytes. .strip() does not
+        # remove ESC, so resync to the first "AT" or the line is wrongly dropped as
+        # non-AT noise and U2 never gets its OK (it then just retries AT forever).
+        at = c.find("AT")
+        if at > 0:
+            c = c[at:]
 
         # --- SMS SEND: capture the telemetry body ---------------------------
         if c.startswith("AT+CMGS"):
@@ -103,6 +111,9 @@ class FakeTelit:
         # --- everything else (ATE0, CMEE, CMGF, CNMI, CSCS, IPR, IFC,
         #     #SELINT, #BND, WMBS, CMGD, plain AT ...): just acknowledge ------
         if c.startswith("AT"):
+            if not self.seen_at:
+                self.seen_at = True
+                print(f"[{ts()}] handshake started — U2 is talking; you can inject now")
             self.ok(); return
 
         # non-AT noise
@@ -137,6 +148,11 @@ class FakeTelit:
 
     def console_loop(self):
         for _ in sys.stdin:
+            if not self.seen_at:
+                print(f"[{ts()}] not injecting yet — U2 hasn't completed its AT "
+                      "handshake (no ATE0/CPIN traffic seen). Wait for it, then "
+                      "press Enter.")
+                continue
             self.have_injected_msg = True
             # Nudge U2 to read it: unsolicited new-message indication.
             self.send('+CMTI: "SM",1')
