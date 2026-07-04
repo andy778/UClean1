@@ -36,8 +36,27 @@ EEPROM config (code + phone numbers) and the counter differ per board, and the
 radios may be individually paired. Confirm `SW Ver:` / `Proc Ver:` match on both
 before using board-A firmware to explain board-B radio.
 
-## Modem port / serial (Path A)
-Attempted to read the modem port directly with a laptop and a USB-to-serial cable, sweeping the common baud rates. No traffic was observed on any of them — the port appeared dead. This avenue is parked for now in favour of the flash/firmware work below (Path B).
+## Modem port / serial (Path A) — **working**
+This is now the **validated primary telemetry route**. The U2 CPU runs a full
+**GSM/SMS controller**: it drives a Telit modem over SCI2 at 9600 8N1 and answers
+a text command interface that reports the plant state in plain ASCII.
+
+Impersonating that modem on the bench (no SIM) reads it directly — send the unit's
+4-character access code and it replies:
+
+```
+CYCLE COUNTER:2129
+PLANT STATUS:S102      (S102 = Aeration; S1xx clean / S2xx wait / S3xx maint / S4xx test)
+ALARM STATUS:NO
+```
+
+The J5 "Modem" header is **RS-232 via U10/SP3232** (not TTL), which is why the
+first attempt — a bare USB-serial cable sweeping baud rates — saw nothing: it was
+reading inverted RS-232 levels, and with no modem attached U2 mostly stays quiet.
+Tap the SP3232 TTL side (or use an RS-232 adapter), impersonate the modem, and the
+telemetry falls out. Full write-up, wiring, command grammar, and the
+[`tools/fake_telit.py`](tools/fake_telit.py) bench tool:
+**[docs/u2-serial-protocol.md](docs/u2-serial-protocol.md)**.
 
 ## Datasheets 
 | No       | Description | IC           |
