@@ -12,12 +12,28 @@ Wiring: connect a 3.3 V USB-UART to the SCI2 lines (the SP3232 channel that emit
 side at SP3232 (T?IN / R?OUT), NOT the RS-232 connector, unless your adapter is
 RS-232. Common ground.
 
-Usage:
-    python3 fake_telit.py --port /dev/ttyUSB0
-    python3 fake_telit.py --port /dev/ttyUSB0 --inject "CODE STATUS"   # push a
-        fake incoming command SMS so U2 issues AT+CMGR and then replies.
+SMS command grammar (from the firmware help strings, verbatim):
+    <CODE>          -> "Status of the plant"  (CYCLE COUNTER: / PLANT STATUS: /
+                       ALARM STATUS:) -- this is the satsräknare payoff
+    <CODE> CONF     -> "Config settings"      (CODE:/REPLY:/HEARTBEAT:/PHONE1..3)
+    <CODE> CONF ?   -> "Help for the config"
+    <CODE> RS       -> "Back to the default settings"
+where <CODE> is the unit's 4-character access code (firmware: "CODE: 4 char").
+On board A that code is `PASS` (dumped from the U3 EEPROM at 0x3A9D). There is
+NO "STATUS" verb — send the bare 4-char code to get plant status. Two more EEPROM
+facts gate a reply: U2 accepts commands only from a stored number (PHONE1-3 =
++358000000000 on board A; set with --from), and it only replies if REPLY is ON
+(header byte 0x01 at 0x3A98 suggests ON — confirm with '<CODE> CONF').
 
-Press Enter at the console at any time to inject the --inject text as a new SMS.
+Usage:
+    python3 fake_telit.py --port /dev/ttyUSB0                     # Enter injects PASS
+    python3 fake_telit.py --port /dev/ttyUSB0 --inject "PASS CONF"  # dump config
+    python3 fake_telit.py --port /dev/ttyUSB0 --sweep            # auto-try every
+        candidate command and print which ones U2 answers (add --include-reset to
+        also try the destructive '<CODE> RS').
+
+Press Enter at the console (after the AT handshake starts) to inject the --inject
+text as a new incoming SMS, so U2 issues AT+CMGR, then AT+CMGS with its reply.
 """
 import argparse
 import sys
@@ -37,11 +53,18 @@ def ts():
 
 
 class FakeTelit:
-    def __init__(self, ser, inject_text):
+    def __init__(self, ser, inject_text, origin="+358000000000"):
         self.ser = ser
         self.inject_text = inject_text
+        # Sender of the injected SMS. U2 only accepts commands from a stored
+        # number (EEPROM PHONE1-3); on board A those are all +358000000000, so
+        # that is the default. If it does not match a stored slot, U2 reads and
+        # deletes the message but never replies — the exact silent-drop we saw.
+        self.origin = origin
         self.have_injected_msg = False  # a pending "stored" incoming SMS at index 1
         self.seen_at = False            # U2 has completed at least one AT<->OK
+        self.reply_event = threading.Event()  # set when an AT+CMGS body is captured
+        self.last_reply = None                # bytes of the most recent captured body
 
     def send(self, text):
         """Send a Telit-style response line (framed with CRLF like a real modem)."""
@@ -73,6 +96,8 @@ class FakeTelit:
             print(f"[{ts()}] *** CAPTURED OUTGOING SMS BODY (telemetry) ***")
             print(body.decode(errors="replace"))
             print("=" * 60)
+            self.last_reply = body          # hand it to a waiting --sweep, if any
+            self.reply_event.set()
             self.send("+CMGS: 1")
             self.ok()
             return
@@ -81,7 +106,7 @@ class FakeTelit:
         if c.startswith("AT+CMGR"):
             if self.have_injected_msg:
                 # +CMGR: <stat>,<oa>,,<scts>  then the text  then OK
-                self.send('+CMGR: "REC UNREAD","+358000000000",,"'
+                self.send(f'+CMGR: "REC UNREAD","{self.origin}",,"'
                           '00/01/01,00:00:00+00"')
                 self.ser.write(self.inject_text.encode() + CRLF)
                 print(f"[{ts()}] TX-> injected SMS text {self.inject_text!r}")
@@ -103,7 +128,7 @@ class FakeTelit:
         if c.startswith("AT+CMGL"):
             # list messages: pretend none unless one injected
             if self.have_injected_msg:
-                self.send('+CMGL: 1,"REC UNREAD","+358000000000",,')
+                self.send(f'+CMGL: 1,"REC UNREAD","{self.origin}",,')
                 self.ser.write(self.inject_text.encode() + CRLF)
                 self.have_injected_msg = False
             self.ok(); return
@@ -146,6 +171,50 @@ class FakeTelit:
             else:
                 line += b
 
+    def inject_once(self, text):
+        """Queue `text` as a new incoming SMS and nudge U2 to read it (+CMTI)."""
+        self.inject_text = text
+        self.reply_event.clear()
+        self.last_reply = None
+        self.have_injected_msg = True
+        self.send('+CMTI: "SM",1')
+
+    def sweep(self, commands, timeout=25.0, settle=2.0):
+        """Auto-try each candidate command, recording which ones U2 answers.
+
+        For each command: deliver it as an SMS, wait up to `timeout` for U2 to
+        reply via AT+CMGS (captured in handle()), then pause `settle` s so U2 can
+        delete the message and return to idle before the next one. A late reply
+        that lands in the next command's window is possible — treat a lone hit
+        near a boundary with suspicion and re-run it singly with --inject.
+        """
+        waited = 0.0
+        while not self.seen_at and waited < 60.0:
+            time.sleep(0.5); waited += 0.5
+        if not self.seen_at:
+            print(f"[{ts()}] WARNING: no AT handshake seen in 60 s — sweeping anyway")
+
+        results = []
+        for cmd in commands:
+            print(f"[{ts()}] SWEEP -> {cmd!r}  (waiting up to {timeout:.0f} s)")
+            self.inject_once(cmd)
+            got = self.reply_event.wait(timeout)
+            body = self.last_reply if got else None
+            results.append((cmd, body))
+            print(f"[{ts()}] SWEEP <- {cmd!r} "
+                  + (f"REPLIED ({len(body)} B)" if got else "no reply"))
+            time.sleep(settle)
+
+        print("\n" + "=" * 60 + "\nSWEEP SUMMARY\n" + "=" * 60)
+        for cmd, body in results:
+            if body is None:
+                print(f"  {cmd!r:16}  (no reply)")
+            else:
+                print(f"  {cmd!r:16}  REPLY:")
+                for ln in body.decode(errors="replace").splitlines():
+                    print(f"      {ln}")
+        return results
+
     def console_loop(self):
         for _ in sys.stdin:
             if not self.seen_at:
@@ -159,22 +228,57 @@ class FakeTelit:
             print(f"[{ts()}] queued injected SMS {self.inject_text!r}; sent +CMTI")
 
 
+def build_sweep(code, include_reset):
+    """Candidate SMS commands to try in --sweep, most-likely first.
+
+    Firmware grammar: `<CODE>` (status) / `<CODE> CONF` / `<CODE> CONF ?` /
+    `<CODE> RS`, where <CODE> is the 4-char access code (board A: PASS). We also
+    try the literal word CODE as a fallback in case the stored code differs. RS
+    resets the config to defaults, so it is opt-in via --include-reset.
+    """
+    verbs = ["", " CONF", " CONF ?"]
+    cmds = [code + v for v in verbs]
+    if code.upper() != "CODE":
+        cmds += ["CODE" + v for v in verbs]  # literal-keyword fallback
+    if include_reset:
+        cmds.append(code + " RS")
+    return cmds
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", required=True, help="e.g. /dev/ttyUSB0")
     ap.add_argument("--baud", type=int, default=9600)
-    ap.add_argument("--inject", default="CODE STATUS",
-                    help="text delivered as an incoming SMS when you press Enter")
+    ap.add_argument("--inject", default="PASS",
+                    help="incoming-SMS text sent on Enter. Default 'PASS' = board "
+                         "A's 4-char access code -> plant status. Try 'PASS CONF' "
+                         "for config. (No 'STATUS' verb exists; send the bare code.)")
+    ap.add_argument("--code", default="PASS",
+                    help="the unit's 4-char access code for --sweep (board A: PASS)")
+    ap.add_argument("--sweep", action="store_true",
+                    help="auto-try candidate commands, report which U2 answers, exit")
+    ap.add_argument("--include-reset", action="store_true",
+                    help="also try the destructive '<CODE> RS' (reset) in --sweep")
+    ap.add_argument("--sweep-timeout", type=float, default=25.0,
+                    help="seconds to wait for a reply per swept command")
+    ap.add_argument("--from", dest="origin", default="+358000000000",
+                    help="sender number for injected SMS; must match a stored "
+                         "PHONE1-3 (EEPROM: +358000000000 on board A)")
     args = ap.parse_args()
 
     ser = serial.Serial(args.port, args.baud, bytesize=8, parity="N",
                         stopbits=1, timeout=0.2)
     print(f"[{ts()}] fake Telit on {args.port} @ {args.baud} 8N1")
-    print("Press Enter to inject an incoming command SMS. Ctrl-C to quit.")
-    ft = FakeTelit(ser, args.inject)
+    ft = FakeTelit(ser, args.inject, origin=args.origin)
     threading.Thread(target=ft.reader_loop, daemon=True).start()
     try:
-        ft.console_loop()
+        if args.sweep:
+            cmds = build_sweep(args.code, args.include_reset)
+            print(f"[{ts()}] SWEEP mode: {len(cmds)} commands -> {cmds}")
+            ft.sweep(cmds, timeout=args.sweep_timeout)
+        else:
+            print("Press Enter to inject an incoming command SMS. Ctrl-C to quit.")
+            ft.console_loop()
     except KeyboardInterrupt:
         pass
 
