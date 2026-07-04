@@ -102,9 +102,8 @@ Notes:
   must poll it.
 - **`CYCLE COUNTER:2129` is board A's own counter**, not board B's display
   *satsräknare* (1258); the two boards keep independent counts.
-- **`PLANT STATUS:S102`** is a status code, not yet mapped. Decode it like the
-  radio `[U6]`: read `PASS` at known display phases and tabulate the `S<nnn>`
-  values against the EEPROM cycle/phase table.
+- **`PLANT STATUS:S102` = Aeration.** The `S`-codes are the treatment-cycle
+  step, decoded from the Uponor Clean 1 manual (full table below).
 - `ALARM STATUS` returns `NO` when clear; on a fault it carries the alarm text
   (`Compressor fault`, `MV1`-`MV5 fault`, `EEPROM error`, …).
 
@@ -113,6 +112,54 @@ an HA integration is a persistent fake-modem daemon that injects `PASS` on a
 timer, parses the three status lines, and publishes them to MQTT (`cycle_counter`,
 `plant_status`, `alarm_status`). No SIM, no cellular, no radio decode — the most
 direct telemetry route found.
+
+### `PLANT STATUS` `S<nnn>` codes (decoded from the manual)
+
+The `S`-codes are the treatment-cycle step shown on the styrskåp display. The
+hundreds digit is the cycle (1 = cleaning, 2 = waiting, 3 = maintenance,
+4 = test), matching the firmware's cycle-prefixed phase table:
+
+| Code(s)       | Meaning |
+| ---           | --- |
+| `S101`        | Filling the process tank |
+| `S102`        | **Aeration** (the captured value) |
+| `S103`–`S105` | Chemical dosing & mixing |
+| `S106`–`S108` | Excess-sludge return + post-sedimentation (`S108` = 2nd sedimentation) |
+| `S109`        | Discharge of cleaned water |
+| `S201`–`S204` | Waiting mode (vänteläge) |
+| `S301`–`S305` | Maintenance phase (underhållsfas) |
+| `S400`        | Test cycle started |
+| `S401`–`S408` | Test steps: pump-in, sludge-removal, pump-out, chem-fill, dose, settle, aeration I, aeration II |
+
+### `ALARM STATUS` / fault `E`-codes (three views of one fault)
+
+`ALARM STATUS` is `NO` when clear; a fault carries the alarm text, which the
+manual also shows as a display `E`-code. These line up with the EEPROM alarm
+table ([eeprom-map.md](eeprom-map.md)) — the SMS text, the display code, and the
+firmware byte are the same fault:
+
+| Display | SMS alarm text (EEPROM code) | Cause |
+| ---     | ---                          | --- |
+| `E011`  | No radio connection (`0x02`) | control-panel link lost |
+| `E021`  | Chemical level low (`0x15`)  | low flocculant |
+| `E031`  | High water; tank (`0x1F`)    | inlet module blocked |
+| `E032`  | High water; outlet (`0x20`)  | outlet / pump-out blocked |
+| `E040`  | Compressor fault (`0x28`)    | air-pump fault |
+| `E041`  | MV1 fault (`0x29`)           | chemical-dosing valve |
+| `E042`  | MV2 fault (`0x2A`)           | sludge-return valve |
+| `E043`  | MV3 fault (`0x2B`)           | pump-out valve |
+| `E044`  | MV4 fault (`0x2C`)           | pump-in valve |
+| `E045`  | MV5 fault (`0x2D`)           | aeration valve |
+| `E034`/`E047` | EEPROM error (`0x2F`)  | control-cabinet / program fault (exact pairing unconfirmed) |
+| `E051`  | Sludge empty remind (`0x33`) | septic section filling |
+| `E401`–`E403` | (service reminders)    | 1 / 3 / 6-year service due |
+| `E000`  | — (normal / after reset)     | no fault |
+
+So `MV1`–`MV5` are the five solenoid valves: dosing, sludge-return, pump-out,
+pump-in, aeration.
+
+Source: Uponor Clean I installation & operation manual (03/2026) — "Reningsverkets
+status" (S-codes) and "Åtgärder vid störningar" (E-codes).
 
 ## Hardware access — J5 "Modem" header
 
