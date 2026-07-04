@@ -5,10 +5,17 @@ mostly-independent streams; each can be worked in its own branch/worktree.
 
 | Stream | Goal | Status |
 | ---    | ---  | ---    |
-| Serial (Path A) | Tap the modem port | **Dead** — no traffic at common baud rates |
-| Radio / SPI | Recover the nRF905 config → native nRF905 receiver | **Not in this firmware** — see below; needs SDR or an nRF9E5 dump |
-| EEPROM | Map the live records the firmware reads from U3 | Blocked on a full 16 KB dump |
-| rtl_433 | FSK decoder for the 868.35 MHz link → MQTT → Home Assistant | Not started |
+| Serial (Path A) | Tap the modem port for the cycle counter | **Working ✅** — U2 is a full GSM/SMS controller; impersonating the modem (no SIM) reads live `CYCLE COUNTER` / `PLANT STATUS` / `ALARM STATUS`. S/E-codes decoded from the manual. See [docs/u2-serial-protocol.md](docs/u2-serial-protocol.md). |
+| Firmware (Path B) | Disassemble the U2 flash | **Done** — ~267 functions; I2C driver + SPI-slave finding mapped. See [docs/ghidra-firmware-analysis.md](docs/ghidra-firmware-analysis.md). |
+| Radio PHY (Path C) | Recover the nRF905 config / on-air format | **Not in the U2 flash** (MC9S08 is SPI slave) — lives in the nRF9E5's 8051. Extraction plan written, bench not done. See [docs/nrf9e5-firmware.md](docs/nrf9e5-firmware.md). |
+| EEPROM | Map the live records the firmware reads from U3 | **Done** — full 16 KB dumped and mapped (program table + GSM config; no live telemetry). See [docs/eeprom-map.md](docs/eeprom-map.md). |
+| rtl_433 | FSK decoder for the 868.35 MHz link → MQTT → Home Assistant | **Frames recovered** — 100 kbps Manchester, `fd 7a ba ba ba 83` header. The counter is **not** on the radio (heartbeat is static across a counter tick); only batch *events* show. Byte-field mapping + trailer check still open. See [docs/rtl433.md](docs/rtl433.md). |
+
+**Recommended next action:** Path A is the telemetry route. Build the
+poll → parse → MQTT bridge (drive `tools/fake_telit.py`'s query loop, publish
+`cycle_counter` / `plant_status` / `alarm_status`) for Home Assistant. The radio
+streams carry batch events but not the numeric counter, so they are a secondary
+signal at best.
 
 ## Reproducing the firmware analysis
 
