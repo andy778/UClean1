@@ -40,6 +40,18 @@ board itself provides E0/E1/E2 (→ `0x50`) and WC:
 | **pin 5**     | GPIO3 / SCL1 | 6  SCL       |
 | **pin 6**     | GND          | 4  VSS       |
 
+All four sit in the **top-left corner** of the 40-pin header (odd pins in the
+left column, even in the right; pin 1 is the square pad):
+
+```
+    3V3  ──▶ [ 1] [ 2]     5V
+GPIO2/SDA ──▶ [ 3] [ 4]     5V
+GPIO3/SCL ──▶ [ 5] [ 6] ◀── GND
+              [ 7] [ 8]
+```
+
+Full interactive reference: **[pinout.xyz/pinout/i2c](https://pinout.xyz/pinout/i2c)**.
+
 The chip's other pins were **left to the board**: E0/E1/E2 (pins 1/2/3) are held
 low by PCB traces and WC (pin 7) is already tied — so a read-only in-circuit dump
 needs nothing on them. (Reading a **desoldered** chip on a breadboard, you must
