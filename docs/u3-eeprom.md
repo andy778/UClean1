@@ -26,32 +26,31 @@ The M24128 is an 8-pin device (SO8/DIP8). Standard pinout:
 | 8   | VCC       | +1.8 … 5.5 V supply              |
 
 Because the chip answers at `0x50`, the three address pins **E0/E1/E2 are all
-tied low** (the I2C device-type code `1010` + `E2 E1 E0 = 000` = `0x50`).
+tied low** (the I2C device-type code `1010` + `E2 E1 E0 = 000` = `0x50`) — and on
+this board they are grounded **by the PCB**, so they need no wiring from the Pi.
 
-Connect it to the Pi's 40-pin header, I2C **bus 1**:
+**What was actually connected for this dump:** just **four** wires, all on the
+Pi's 40-pin header (I2C **bus 1**) — because the chip was read **in-circuit**, the
+board itself provides E0/E1/E2 (→ `0x50`) and WC:
 
-| M24128 pin | Wire to                | Pi header pin |
-| ---        | ---                    | ---           |
-| 8  VCC     | 3V3                    | pin 1         |
-| 4  VSS     | GND                    | pin 6         |
-| 5  SDA     | GPIO2 / SDA1           | pin 3         |
-| 6  SCL     | GPIO3 / SCL1           | pin 5         |
-| 1  E0      | GND                    | any GND       |
-| 2  E1      | GND                    | any GND       |
-| 3  E2      | GND                    | any GND       |
-| 7  WC      | GND (or VCC, see below)| any GND / 3V3 |
+| Pi header pin | Pi function  | → M24128 pin |
+| ---           | ---          | ---          |
+| **pin 1**     | 3V3          | 8  VCC       |
+| **pin 3**     | GPIO2 / SDA1 | 5  SDA       |
+| **pin 5**     | GPIO3 / SCL1 | 6  SCL       |
+| **pin 6**     | GND          | 4  VSS       |
+
+The chip's other pins were **left to the board**: E0/E1/E2 (pins 1/2/3) are held
+low by PCB traces and WC (pin 7) is already tied — so a read-only in-circuit dump
+needs nothing on them. (Reading a **desoldered** chip on a breadboard, you must
+add them yourself: E0/E1/E2 → GND for address `0x50`, WC → GND or VCC.)
 
 Notes:
 - Bus 1 on the Pi has on-board ~1.8 kΩ pull-ups on SDA/SCL, so external
   pull-ups are usually unnecessary.
-- **WC**: tie low to allow writes, or to VCC to hard write-protect. For
-  read-only dumping either is fine — tie to VCC if you want to guarantee the
-  chip can't be modified.
-- Use **3V3, never 5V**, on a Pi — the GPIO is not 5V-tolerant.
+- Use **3V3, never 5V**, on a Pi — the GPIO is not 5V-tolerant. Pi pin 1 is 3V3.
 - Enable I2C first: `sudo raspi-config` → Interface Options → I2C, then reboot.
-
-> ⚠️ This is the *standard* M24128↔Pi wiring, reconstructed from the datasheet —
-> verify it against the actual board before powering up.
+- In-circuit means the CPU shares this bus — see bus-contention note below.
 
 ## Reading in-circuit vs. desoldered
 
