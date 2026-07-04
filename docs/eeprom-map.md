@@ -73,24 +73,29 @@ a phase-index byte, then a label of the form `"<cycle#> <PhaseName>"`.
 ### `0x03D4–0x04CF` — alarm / status message table
 
 Each entry is a **1-byte message code** followed by the display text. These are
-the states/faults the unit reports (and SMS-sends). Recovered codes:
+the states/faults the unit reports (and SMS-sends). The **Display** column is the
+`E`-code the styrskåp shows for the same fault, from the Uponor Clean I manual
+("Åtgärder vid störningar") — so byte / SMS text / display code are three views of
+one fault (see [u2-serial-protocol.md](u2-serial-protocol.md), `ALARM STATUS`):
 
-| Code | Text                |
-| ---  | ---                 |
-| 0x02 | No radio connection |
-| 0x15 | Chemical level low  |
-| 0x1F | High water; tank    |
-| 0x20 | High water; outlet  |
-| 0x28 | Compressor fault    |
-| 0x29 | MV1 fault           |
-| 0x2A | MV2 fault           |
-| 0x2B | MV3 fault           |
-| 0x2C | MV4 fault           |
-| 0x2D | MV5 fault           |
-| 0x2F | EEPROM error        |
-| 0x33 | Sludge empty remind |
+| Code | Text                | Display | Valve / cause |
+| ---  | ---                 | ---     | --- |
+| 0x02 | No radio connection | `E011`  | control-panel link lost |
+| 0x15 | Chemical level low  | `E021`  | low flocculant |
+| 0x1F | High water; tank    | `E031`  | inlet module blocked |
+| 0x20 | High water; outlet  | `E032`  | outlet / pump-out blocked |
+| 0x28 | Compressor fault    | `E040`  | air pump |
+| 0x29 | MV1 fault           | `E041`  | chemical-dosing valve |
+| 0x2A | MV2 fault           | `E042`  | sludge-return valve |
+| 0x2B | MV3 fault           | `E043`  | pump-out valve |
+| 0x2C | MV4 fault           | `E044`  | pump-in valve |
+| 0x2D | MV5 fault           | `E045`  | aeration valve |
+| 0x2F | EEPROM error        | `E034`/`E047` | control-cabinet / program fault (pairing unconfirmed) |
+| 0x33 | Sludge empty remind | `E051`  | septic section filling |
 
-(`MV1–MV5` = the five motor valves / solenoids; the phase list drives them.)
+So `MV1–MV5` are the five solenoid valves — **dosing, sludge-return, pump-out,
+pump-in, aeration** — which the phase list drives. (`E401`–`E403` are the 1/3/6-year
+service reminders; `E000` = no fault.)
 
 ### `0x04D0–0x05BF` — actuator event / timing table
 
