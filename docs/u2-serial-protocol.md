@@ -8,8 +8,10 @@ interface that reports the plant's status, including the **cycle counter**
 promising route to Home Assistant telemetry — it carries the counter and alarm
 state in plain ASCII, no radio decoding required.
 
-Everything below is recovered from `dumps/u2-mc9s08gt-flash.s19`; the bench steps
-are not yet done.
+Everything below is recovered from `dumps/u2-mc9s08gt-flash.s19` and **now
+confirmed on real hardware**: the fake-modem bench test reads live
+`CYCLE COUNTER` / `PLANT STATUS` / `ALARM STATUS` and the full config out of U2
+over the serial port (see "Validated on hardware" below).
 
 ## Firmware evidence
 
@@ -53,6 +55,64 @@ The stored placeholders are non-secret defaults (`PASS`, `+358000000000`).
 
 `CYCLE COUNTER:` is exactly the display's *satsräknare* — reaching it over the
 serial port is the goal of Path A.
+
+## Validated on hardware ✅
+
+The fake-modem test ([`tools/fake_telit.py`](../tools/fake_telit.py) `--sweep`)
+was run against U2 on **board A** and **works end to end** — no SIM, no network.
+U2 completes its full AT init against the fake modem, then answers an injected
+command SMS with plain-ASCII telemetry.
+
+**Command grammar (confirmed).** The SMS body is the unit's **4-character access
+code**, optionally followed by a sub-command. `CODE` in the firmware help is a
+*placeholder for that code*, **not** a literal keyword — bare `CODE` / `CODE CONF`
+drew **no reply**; only the real code (`PASS`) did:
+
+| SMS body      | reply |
+| ---           | ---   |
+| `PASS`        | plant status |
+| `PASS CONF`   | config settings |
+| `PASS CONF ?` | config help |
+| `PASS RS`     | reset to defaults (destructive — not run) |
+
+**Captured status (`PASS`), board A:**
+
+```
+CYCLE COUNTER:2129
+PLANT STATUS:S102
+ALARM STATUS:NO
+```
+
+**Captured config (`PASS CONF`), board A:**
+
+```
+CODE=PASS
+REPLY=ON
+HEARTBEAT=0
+SMSCOUNTER=1
+PHONE1=+358000000000
+PHONE2=+358000000000
+PHONE3=+358000000000
+```
+
+Notes:
+- Two EEPROM facts gate the reply, both now verified: U2 answers only a **stored
+  sender** (`PHONE1-3 = +358000000000`) and only when **`REPLY=ON`** (the `0x01`
+  byte at EEPROM `0x3A98`). `HEARTBEAT=0` means U2 sends nothing on its own — you
+  must poll it.
+- **`CYCLE COUNTER:2129` is board A's own counter**, not board B's display
+  *satsräknare* (1258); the two boards keep independent counts.
+- **`PLANT STATUS:S102`** is a status code, not yet mapped. Decode it like the
+  radio `[U6]`: read `PASS` at known display phases and tabulate the `S<nnn>`
+  values against the EEPROM cycle/phase table.
+- `ALARM STATUS` returns `NO` when clear; on a fault it carries the alarm text
+  (`Compressor fault`, `MV1`-`MV5 fault`, `EEPROM error`, …).
+
+**Home Assistant path.** Because `HEARTBEAT=0` and U2 replies only when polled,
+an HA integration is a persistent fake-modem daemon that injects `PASS` on a
+timer, parses the three status lines, and publishes them to MQTT (`cycle_counter`,
+`plant_status`, `alarm_status`). No SIM, no cellular, no radio decode — the most
+direct telemetry route found.
 
 ## Hardware access — J5 "Modem" header
 
@@ -124,23 +184,25 @@ side** (U2 SCI2 TX = the driver input pin), or an **RS-232-level** adapter on th
 J5 data pins. Prediction: a burst of printable ASCII — `ATE0`, `AT+CPIN?`,
 `AT+CREG?`… The pin that bursts is U2's transmit.
 
-**Tier 3 — fake modem, no SIM (strongest bench proof).** Cross-connect to the
-serial line — either an **RS-232 adapter on J5**, or (simpler) a plain USB-UART on
-the **SP3232 TTL side** (adapter **RX ← U2 SCI2 TX**, adapter **TX → U2 SCI2 RX**,
-common GND, **J5 5V pin left unconnected**) — and run
+**Tier 3 — fake modem, no SIM (done ✅ — see "Validated on hardware" above).**
+Cross-connect to the serial line — either an **RS-232 adapter on J5**, or
+(simpler) a plain USB-UART on the **SP3232 TTL side** (adapter **RX ← U2 SCI2 TX**,
+adapter **TX → U2 SCI2 RX**, common GND, **J5 5V pin left unconnected**) — and run
 [`tools/fake_telit.py`](../tools/fake_telit.py):
 
 ```
-python3 tools/fake_telit.py --port /dev/ttyUSB0
+python3 tools/fake_telit.py --port /dev/ttyUSB0 --sweep
 ```
 
 It answers U2's init handshake so U2 believes a registered modem is present, then
-**captures the SMS body U2 sends** (`AT+CMGS`) — which contains `CYCLE COUNTER:`,
-`PLANT STATUS:` and `ALARM STATUS:`. Press Enter to inject a fake incoming
-`CODE STATUS` SMS and exercise the query→reply path (`+CMTI` → `AT+CMGR`).
+**captures the SMS body U2 sends** (`AT+CMGS`) — `CYCLE COUNTER:`, `PLANT STATUS:`
+and `ALARM STATUS:`. `--sweep` auto-tries every candidate command; without it,
+press Enter to inject the `--inject` command (default `PASS`) and exercise the
+query→reply path (`+CMTI` → `AT+CMGR` → `AT+CMGS`). This yielded the captured
+telemetry above.
 
-**Tier 4 — full GSM (end-to-end).** Real SIM + antenna; text the unit its
-`CODE …` query and read the reply.
+**Tier 4 — full GSM (end-to-end, optional).** Real SIM + antenna; text the unit
+its `PASS` query and read the reply. Not needed now that tier 3 works.
 
-Recommended: **tier 2 → tier 3**. Tier 2 is a yes/no; tier 3 turns it into a
-working, SIM-free telemetry tap that already yields the cycle counter.
+Tier 3 is the payoff: a working, SIM-free telemetry tap that already yields the
+cycle counter, plant status, alarm state, and full config.
