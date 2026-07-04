@@ -12,12 +12,23 @@ Wiring: connect a 3.3 V USB-UART to the SCI2 lines (the SP3232 channel that emit
 side at SP3232 (T?IN / R?OUT), NOT the RS-232 connector, unless your adapter is
 RS-232. Common ground.
 
-Usage:
-    python3 fake_telit.py --port /dev/ttyUSB0
-    python3 fake_telit.py --port /dev/ttyUSB0 --inject "CODE STATUS"   # push a
-        fake incoming command SMS so U2 issues AT+CMGR and then replies.
+SMS command grammar (from the firmware help strings, verbatim):
+    <CODE>          -> "Status of the plant"  (CYCLE COUNTER: / PLANT STATUS: /
+                       ALARM STATUS:) -- this is the satsräknare payoff
+    <CODE> CONF     -> "Config settings"      (CODE:/REPLY:/HEARTBEAT:/PHONE1..3)
+    <CODE> CONF ?   -> "Help for the config"
+    <CODE> RS       -> "Back to the default settings"
+where <CODE> is the unit's 4-character access code (firmware: "CODE: 4 char").
+On board A that code is `PASS` (dumped from the U3 EEPROM at 0x3A9D). There is
+NO "STATUS" verb — send the bare 4-char code to get plant status. A reply is only
+sent if the unit's REPLY setting is ON.
 
-Press Enter at the console at any time to inject the --inject text as a new SMS.
+Usage:
+    python3 fake_telit.py --port /dev/ttyUSB0                     # Enter injects PASS
+    python3 fake_telit.py --port /dev/ttyUSB0 --inject "PASS CONF"  # dump config
+
+Press Enter at the console (after the AT handshake starts) to inject the --inject
+text as a new incoming SMS, so U2 issues AT+CMGR, then AT+CMGS with its reply.
 """
 import argparse
 import sys
@@ -163,8 +174,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", required=True, help="e.g. /dev/ttyUSB0")
     ap.add_argument("--baud", type=int, default=9600)
-    ap.add_argument("--inject", default="CODE STATUS",
-                    help="text delivered as an incoming SMS when you press Enter")
+    ap.add_argument("--inject", default="PASS",
+                    help="incoming-SMS text sent on Enter. Default 'PASS' = board "
+                         "A's 4-char access code -> plant status. Try 'PASS CONF' "
+                         "for config. (No 'STATUS' verb exists; send the bare code.)")
     args = ap.parse_args()
 
     ser = serial.Serial(args.port, args.baud, bytesize=8, parity="N",
