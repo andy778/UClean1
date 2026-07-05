@@ -221,35 +221,22 @@ are ±RS-232). Two options:
   (R_OUT = U2 SCI2 RX) — at **5 V TTL**, which a plain USB-UART / logic analyzer
   reads directly. Common ground to the board.
 
-## Verification plan
+## Bench setup (how "Validated on hardware" above was done)
 
-**Tier 1 — static (done).** The three firmware findings above.
-
-**Tier 2 — passive scope (decisive, ~5 min).** Probe at **9600 8N1**, then
-power-cycle the board. Use a logic analyzer / plain USB-UART on the **SP3232 TTL
-side** (U2 SCI2 TX = the driver input pin), or an **RS-232-level** adapter on the
-J5 data pins. Prediction: a burst of printable ASCII — `ATE0`, `AT+CPIN?`,
-`AT+CREG?`… The pin that bursts is U2's transmit.
-
-**Tier 3 — fake modem, no SIM (done ✅ — see "Validated on hardware" above).**
 Cross-connect to the serial line — either an **RS-232 adapter on J5**, or
 (simpler) a plain USB-UART on the **SP3232 TTL side** (adapter **RX ← U2 SCI2 TX**,
-adapter **TX → U2 SCI2 RX**, common GND, **J5 5V pin left unconnected**) — and run
-[`tools/fake_telit.py`](../tools/fake_telit.py):
+adapter **TX → U2 SCI2 RX**, common GND, **J5 5V pin left unconnected**) — 9600
+8N1, and run [`tools/fake_telit.py`](../tools/fake_telit.py):
 
 ```
 python3 tools/fake_telit.py --port /dev/ttyUSB0 --sweep
 ```
 
-It answers U2's init handshake so U2 believes a registered modem is present, then
-**captures the SMS body U2 sends** (`AT+CMGS`) — `CYCLE COUNTER:`, `PLANT STATUS:`
-and `ALARM STATUS:`. `--sweep` auto-tries every candidate command; without it,
-press Enter to inject the `--inject` command (default `PASS`) and exercise the
-query→reply path (`+CMTI` → `AT+CMGR` → `AT+CMGS`). This yielded the captured
-telemetry above.
+It answers U2's init handshake so U2 believes a registered modem is present,
+then captures the SMS body U2 sends (`AT+CMGS`) — `CYCLE COUNTER:`,
+`PLANT STATUS:`, `ALARM STATUS:`. `--sweep` auto-tries every candidate command;
+without it, press Enter to inject `--inject` (default `PASS`) and exercise
+`+CMTI` → `AT+CMGR` → `AT+CMGS`.
 
-**Tier 4 — full GSM (end-to-end, optional).** Real SIM + antenna; text the unit
-its `PASS` query and read the reply. Not needed now that tier 3 works.
-
-Tier 3 is the payoff: a working, SIM-free telemetry tap that already yields the
-cycle counter, plant status, alarm state, and full config.
+A full-GSM test (real SIM + antenna, text the unit its `PASS` query) is
+possible but not needed — the bench tap already yields everything above.

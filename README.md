@@ -126,7 +126,10 @@ dumping). The one non-destructive escape is the 8-byte **backdoor key** at
 secured** — a straight BDM dump is enough.
 
 ## Firmware analysis (Path B)
-The U2 CPU flash (`dumps/u2-mc9s08gt-flash.s19`) was disassembled in [Ghidra](https://ghidra-sre.org/). How the headless analysis was run, the gotchas, the recovered driver map (I2C EEPROM access layer + the SPI-slave finding that rules the radio config out of this dump), and the generated decompiler C now live on their own page: **[docs/ghidra-firmware-analysis.md](docs/ghidra-firmware-analysis.md)**.
+The U2 CPU flash (`dumps/u2-mc9s08gt-flash.s19`) was disassembled in [Ghidra](https://ghidra-sre.org/). How the headless analysis was run, the gotchas, and the recovered driver map (I2C EEPROM access + the SPI-slave finding) now live on their own page: **[docs/ghidra-firmware-analysis.md](docs/ghidra-firmware-analysis.md)**.
 
-## nRF9E5 firmware extraction (Path C)
-The on-air radio format (Manchester coding, `fd 7a ba ba ba 83` header, payload packing, nRF905 CRC/channel config) is **not** in the MC9S08 flash — it lives in the nRF9E5's embedded 8051, which has no internal non-volatile memory and boots its code from an external SPI memory. The plan for recovering that 8051 image (PCB inspection, reading the boot memory, or sniffing the power-on boot load) lives on its own page: **[docs/nrf9e5-firmware.md](docs/nrf9e5-firmware.md)**. This is bench work not yet done — no nRF9E5 dump is checked in.
+## nRF9E5 firmware (Path C)
+U1's radio firmware (8051, on-air Manchester/frame/nRF905 config) has **no external boot chip** — it's embedded in the U2 flash we already dumped, and has been extracted + disassembled. See **[docs/nrf9e5-firmware.md](docs/nrf9e5-firmware.md)**.
+
+## Radio decoding (rtl_433)
+The 868 MHz frame (address, 32-byte payload, CRC-16) is confirmed and the decoder is **enabled and CRC-gated** in the fork: [andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c). Spec, byte mapping, and what's still open: **[docs/rtl433-decoder.md](docs/rtl433-decoder.md)**; capture recipes and history: **[docs/radio-capture-log.md](docs/radio-capture-log.md)**.

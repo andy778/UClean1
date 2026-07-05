@@ -43,9 +43,9 @@ analysis: `FUN_a554` + 5-byte / 16-byte / 2-byte wrappers).
 - **Password** `PASS` and all three **phone numbers** (`+358…`, Finland) are
   factory **placeholders / unconfigured** — no real credentials in this dump.
 - The unit sends **SMS alerts** to these numbers (the alarm strings below are
-  the message texts). This confirms the "modem port" is a GSM link. The port
-  itself is the **J5 "Modem" header** (5 V TTL, on U2's SCI2 at 9600) — the
-  reason the first serial tap looked dead, and how to talk to it, are in
+  the message texts). This confirms the "modem port" is a GSM link — the
+  **J5 "Modem" header**, on U2's SCI2 at 9600 (RS-232 via the SP3232 line
+  driver, not raw TTL). Wiring and how to talk to it:
   [docs/u2-serial-protocol.md](u2-serial-protocol.md).
 
 ## `0x0000–0x05BF` — static program table
@@ -107,10 +107,9 @@ long).
 
 ## What this unblocks
 
-- **Labelling radio/telemetry:** once the 868 MHz link is captured (issue #52),
-  the phase names and alarm codes above give ready-made Home Assistant state and
-  fault labels.
+- **Labelling radio/telemetry:** the phase names and alarm codes above are the
+  ready-made Home Assistant state/fault labels once the corresponding radio or
+  serial byte offset is identified (see [rtl433-decoder.md](rtl433-decoder.md)
+  and [u2-serial-protocol.md](u2-serial-protocol.md)).
 - **Remaining unknowns:** the `0x00–0x3F` header params, the exact per-phase
-  field layout, and the `0x3AD5` 2-byte record. These can be pinned down by
-  cross-referencing the firmware accessors (`FUN_a554` call sites) — the next
-  `stream/eeprom` task.
+  field layout, and the `0x3AD5` 2-byte record.
