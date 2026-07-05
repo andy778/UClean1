@@ -147,12 +147,35 @@ gets from the MC9S08 over the inter-MCU link into the radio payload. The payload
 the slowly-changing telemetry captured in [rtl433.md](rtl433.md)
 (`fd 7a ba ba ba 83` app header + data).
 
-**Still open (`[U6]`):** which payload byte is water level / temperature / phase /
-alarm. The container is fully known but the per-byte semantics are not — resolve by
-tracing the RX processor `0x03dc` (what fills `0x30–0x4F`) against what the MC9S08
-sends, or by a display-correlated capture. *No field map is asserted here yet — the
-routines above are plumbing (buffers, SPI, a 32-bit mul/div library at `0x05b1`/
-`0x061f`), not the field layout.*
+### The U2 ↔ 8051 serial protocol — the payload is U2's, verbatim
+
+Tracing the RX processor (`0x03dc`) shows the 8051 is a **transparent relay**. U2
+frames each radio packet as a **length byte `0x01–0x1f` followed by that many
+payload bytes**, which the 8051 copies straight into the radio buffer `0x30–0x4F`
+and transmits (`W_TX_PAYLOAD`). It also takes single-byte **control commands**:
+
+| byte | action |
+| ---  | ---    |
+| `0x01`–`0x1f` | length N → the next N bytes are the radio payload, then TX |
+| `0x55` / `0x56` | radio disable / enable (`P2.5`) |
+| `0x73` | radio register access (config; SPI read of offset `0x11` …) |
+| `0x74` / `0x75` | set / clear flag `0x26` |
+| `0x76` | begin a multi-byte value load |
+| `0xc0` | report 9 bytes (from image `0x670`) back to U2 |
+
+Inbound radio data is relayed the other way, into the outbound buffer `0x50–0x6F`
+back to U2. **The 8051 never computes the payload fields — U2 supplies them
+byte-for-byte.** So `[U6]` (which byte is level / temperature / phase / alarm)
+lives in the **MC9S08 firmware**, in the routine that builds this serial frame. The
+concrete next target is the U2 send path and its live variables — the earlier
+Ghidra pass flagged four 16-bit words at RAM `0x013e` / `0x0140` / `0x0109` /
+`0x010b`; naming them needs the U2-side trace. *No field map is asserted here.*
+
+> **Caveat for [rtl433.md](rtl433.md):** this relay path copies the payload **raw**
+> — there is **no software Manchester encoder** on it. That should be reconciled
+> with §0's "the 8051 does the Manchester coding in software" claim: the Manchester
+> may be applied by U2 before it hands the bytes over, or be nRF905 on-air coding,
+> or a routine off this path. Flagged, not yet resolved.
 
 Reproduce the disassembly with **[`tools/analyze-8051.sh`](../tools/analyze-8051.sh)
 `Dump8051.java`** (headless Ghidra, 8051 processor).
