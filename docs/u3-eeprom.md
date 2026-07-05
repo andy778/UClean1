@@ -141,7 +141,7 @@ f0: ff ff XX XX XX XX XX XX XX XX XX XX XX ff ff ff    ..XXXXXXXXXXX...
 
 ## Where the data really lives
 
-From the firmware analysis (see `ANALYSIS.md`), the MC9S08 reads/writes its
+From the firmware analysis (see [ghidra-firmware-analysis.md](ghidra-firmware-analysis.md)), the MC9S08 reads/writes its
 live records near the **top** of the chip — e.g. a 5-byte record at `0x3A9D`, a
 2-byte record at `0x3AD5`, plus stride indexed record arrays. The page-0 dump
 above misses all of it.
