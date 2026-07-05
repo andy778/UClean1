@@ -99,11 +99,49 @@ Structure:
   `SCON=0x50` (UART mode 1) — plus writes to the **nRF9E5 radio SFRs**
   `0x90`/`0x93`/`0x94`/`0x95`/`0x96`/`0x97` and `0x98`.
 
-The nRF905 **channel, address and CRC mode** are set by those radio-SFR writes.
-Reading the exact values out is the next step: map SFRs `0x90`–`0x9F` against the
-nRF9E5 register table (the [datasheet](https://web.archive.org/web/20240428224643/https://infocenter.nordicsemi.com/pdf/nRF9E5_PS_v1.6.pdf))
-and follow the config-write routine — that closes the `[U4]` CRC / channel
-question in [rtl433.md](rtl433.md).
+## The nRF905 radio configuration — read from the firmware
+
+The config-write routine at `0x015c` selects the RF core (`SPI_CTRL=0x02`),
+asserts the radio chip-select (`CLR P2.3`), then clocks out `W_CONFIG` (`0x00`)
+followed by the 10-byte RF_CONFIG via `SPI_DATA` (`0xB2`, send routine `0x02fb`).
+The bytes are literals in the code:
+
+```
+W_CONFIG  75 06 44 20 20  EA EA EA EA  D4
+```
+
+Decoded against the nRF905 RF_CONFIG register:
+
+| Field | Value | Meaning |
+| ---   | ---   | --- |
+| `CH_NO` | `0x75` = **117** | RF channel |
+| `HFREQ_PLL` | 1 (byte1 `0x06`) | 868/915 band → **f = (422.4 + 117/10) × 2 = 868.2 MHz** |
+| `PA_PWR` | 1 | output power |
+| `TX_AFW`/`RX_AFW` | 4 / 4 (byte2 `0x44`) | **4-byte address** |
+| `RX_PW` / `TX_PW` | `0x20` / `0x20` | **32-byte payload** |
+| `RX_ADDRESS` | `EA EA EA EA` | receive address |
+| `CRC_EN` / `CRC_MODE` | 1 / 1 (byte9 `0xD4`) | **CRC enabled, 16-bit** |
+
+A second command follows — `W_TX_ADDRESS` (`0x22`) + `EA EA EA EA` — so the
+**TX address is also `EAEAEAEA`** (a point-to-point pair with the tank unit).
+
+The computed **868.2 MHz matches the measured carrier** (~868.2–868.3 MHz), an
+independent cross-check that this really is the radio firmware. This resolves the
+rtl_433 unknowns `[U3]` (4-byte address `EAEAEAEA`), `[U4]` (**16-bit CRC**), and
+`[U5]` (**32-byte payload**) — see [rtl433.md](rtl433.md).
+
+## What the radio carries
+
+The receive handler at `0x01c8` issues `R_RX_PAYLOAD` (`0x24`) and reads exactly
+**`R3 = 0x20` = 32 bytes**, then runs a byte-by-byte frame parser. So each
+ShockBurst packet is a 32-byte payload; this control board **polls** (TX 32 B) and
+reads the tank unit's **response** (RX 32 B) — the two-packet, ~62 s exchange seen
+on air. The payload is the slowly-changing telemetry captured in
+[rtl433.md](rtl433.md) (`fd 7a ba ba ba 83` app header + data); the 8051 relays the
+live values it receives from the MC9S08 over the inter-MCU SPI. Mapping individual
+payload bytes to physical quantities (`[U6]`) is the remaining work — now
+approachable from *either* end (disassemble this parser, or the display-correlated
+capture).
 
 ## Optional: confirm the boot-serve on the bench
 
