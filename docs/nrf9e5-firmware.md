@@ -133,15 +133,29 @@ rtl_433 unknowns `[U3]` (4-byte address `EAEAEAEA`), `[U4]` (**16-bit CRC**), an
 ## What the radio carries
 
 The receive handler at `0x01c8` issues `R_RX_PAYLOAD` (`0x24`) and reads exactly
-**`R3 = 0x20` = 32 bytes**, then runs a byte-by-byte frame parser. So each
+**`R3 = 0x20` = 32 bytes**, then runs a byte-by-byte frame parser. The transmit
+side (`0x030b`) sends `W_TX_PAYLOAD` (`0x20`) and clocks out a **32-byte buffer in
+internal RAM `0x30–0x4F`** (fetcher `0x052c`, index wraps at 31). So each
 ShockBurst packet is a 32-byte payload; this control board **polls** (TX 32 B) and
 reads the tank unit's **response** (RX 32 B) — the two-packet, ~62 s exchange seen
-on air. The payload is the slowly-changing telemetry captured in
-[rtl433.md](rtl433.md) (`fd 7a ba ba ba 83` app header + data); the 8051 relays the
-live values it receives from the MC9S08 over the inter-MCU SPI. Mapping individual
-payload bytes to physical quantities (`[U6]`) is the remaining work — now
-approachable from *either* end (disassemble this parser, or the display-correlated
-capture).
+on air.
+
+That radio buffer is filled from bytes the 8051 receives on its **serial
+interrupt** (`0x029f`, standard 8051 `SCON`/`SBUF`; RX processor `0x03dc`), with a
+matching outbound buffer at `0x50–0x6F` — i.e. the 8051 relays the live values it
+gets from the MC9S08 over the inter-MCU link into the radio payload. The payload is
+the slowly-changing telemetry captured in [rtl433.md](rtl433.md)
+(`fd 7a ba ba ba 83` app header + data).
+
+**Still open (`[U6]`):** which payload byte is water level / temperature / phase /
+alarm. The container is fully known but the per-byte semantics are not — resolve by
+tracing the RX processor `0x03dc` (what fills `0x30–0x4F`) against what the MC9S08
+sends, or by a display-correlated capture. *No field map is asserted here yet — the
+routines above are plumbing (buffers, SPI, a 32-bit mul/div library at `0x05b1`/
+`0x061f`), not the field layout.*
+
+Reproduce the disassembly with **[`tools/analyze-8051.sh`](../tools/analyze-8051.sh)
+`Dump8051.java`** (headless Ghidra, 8051 processor).
 
 ## Optional: confirm the boot-serve on the bench
 
