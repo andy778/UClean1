@@ -36,10 +36,7 @@ EEPROM config (code + phone numbers) and the counter differ per board, and the
 radios may be individually paired. Confirm `SW Ver:` / `Proc Ver:` match on both
 before using board-A firmware to explain board-B radio.
 
-## Modem port / serial (Path A)
-Attempted to read the modem port directly with a laptop and a USB-to-serial cable, sweeping the common baud rates. No traffic was observed on any of them — the port appeared dead. This avenue is parked for now in favour of the flash/firmware work below (Path B).
-
-## Datasheets 
+## Datasheets
 | No       | Description | IC           |
 | ---      | ---         |---           |
 | U1       | Transceiver | [nRF9E5](https://web.archive.org/web/20240428224643/https://infocenter.nordicsemi.com/pdf/nRF9E5_PS_v1.6.pdf) |
@@ -50,17 +47,6 @@ Attempted to read the modem port directly with a laptop and a USB-to-serial cabl
 | D6–D12   | Mosfet      | VNE46 AC 4DLMG |
 | OC1–OC7  | Mosfet      | 1435 814 |
 
-The board carries a row of **seven identical output-driver channels** (the
-repeated stages that switch the magnetventiler MV1–MV5, the compressor and the
-pumps), so the designators fall into three matched series — one part per channel:
-* **D6–D12** are all the same VNE46 mosfet as D11.
-* **OC1–OC7** are all the same 1435 814 mosfet as OC6.
-* **OC8–OC14** are all the same MOC3063 optoisolator as OC13.
-
-The two OC series interleave across the row as two descending runs (…OC14, OC7,
-OC13, OC6, OC12, OC5… reading left to right), read off the high-resolution
-silkscreen in `docs/uclean1-pcb.png`.
-
 ## I2C Memory (U3, 128-Kbit / 16 KB)
 U3 is an M24128 EEPROM on the I2C bus at address `0x50`, read with a Raspberry Pi
 and i2c-tools. Wiring the Pi to the chip, reading the full 16 KB (the `i2cdump`
@@ -68,46 +54,17 @@ above only reaches the first 256 bytes), and the dump analysis now live on their
 own page: **[docs/u3-eeprom.md](docs/u3-eeprom.md)**.
 
 ## Flash content
-To read out the flash content from the CPU using reader like [USBDM](https://sourceforge.net/projects/usbdm/files/) will get you and srecord [dumps/u2-mc9s08gt-flash.s19](dumps/u2-mc9s08gt-flash.s19) file. 
-This file one need to convert to binary file [dumps/u2-mc9s08gt-flash.bin](dumps/u2-mc9s08gt-flash.bin) with e.g objcopy.
+The CPU flash was dumped via BDM to [`dumps/u2-mc9s08gt-flash.s19`](dumps/u2-mc9s08gt-flash.s19) and converted to binary with `objcopy`. Full Ghidra analysis lives on its own page: **[docs/ghidra-firmware-analysis.md](docs/ghidra-firmware-analysis.md)**.
 
 ```
 objcopy --input-target=srec --output-target=binary dumps/u2-mc9s08gt-flash.s19 dumps/u2-mc9s08gt-flash.bin
 ```
 
-### Reading the flash back out (BDM dump vs. security)
-
-Reading the flash is a **debug** operation, not a *programming* one. A plain flash
-programmer only exposes the program flow (blank-check → erase → program → verify)
-and has no "read". To dump memory you use the BDM debug channel and a tool that
-issues the BDM memory-read command:
-
-- **USBDM + GDB server** — start the HCS08 GDB server that ships with USBDM, then in
-  the HCS08 `gdb`:
-
-  ```
-  target remote localhost:1234
-  dump srec memory flash.s19 0x8000 0x10000   # 32 KB flash of the GT32
-  dump srec memory ram.s19   0x0080 0x1080    # RAM, optional
-  ```
-
-  `dump srec memory FILE START END` walks the range over BDM and writes an S-record
-  (use `dump ihex memory …` for Intel-hex). MC9S08GT32 map: 32 KB flash at
-  **0x8000–0xFFFF**, RAM at 0x0080–0x107F.
-- **CodeWarrior / P&E Multilink** — connect in the debugger and use *Import/Export
-  Memory → Export* (or the `save` command) over the flash range.
-
-**Flash security caveat.** If read-back is blocked, the part is *secured*: the FSEC
-byte at **0xFFBF** (SEC01:SEC00) makes a programmer able only to mass-erase, never
-read. When secured, BDM reads of flash and RAM are blocked and the only legal
-operation is a mass-erase (which unsecures by wiping everything — useless for
-dumping). The one non-destructive escape is the 8-byte **backdoor key** at
-0xFFB0–0xFFB7, if the firmware enabled KEYEN and you know it. The existing
-`dumps/u2-mc9s08gt-flash.s19` came out cleanly, so **U2 on this board was not
-secured** — a straight BDM dump is enough.
-
-## Firmware analysis (Path B)
-The U2 CPU flash (`dumps/u2-mc9s08gt-flash.s19`) was disassembled in [Ghidra](https://ghidra-sre.org/). How the headless analysis was run, the gotchas, the recovered driver map (I2C EEPROM access layer + the SPI-slave finding that rules the radio config out of this dump), and the generated decompiler C now live on their own page: **[docs/ghidra-firmware-analysis.md](docs/ghidra-firmware-analysis.md)**.
+## Serial / modem port (Path A)
+The `CODE` command interface over the modem port was validated end-to-end via a fake-modem bench test — see **[docs/u2-serial-protocol.md](docs/u2-serial-protocol.md)**.
 
 ## nRF9E5 firmware extraction (Path C)
-The on-air radio format (Manchester coding, `fd 7a ba ba ba 83` header, payload packing, nRF905 CRC/channel config) is **not** in the MC9S08 flash — it lives in the nRF9E5's embedded 8051, which has no internal non-volatile memory and boots its code from an external SPI memory. The plan for recovering that 8051 image (PCB inspection, reading the boot memory, or sniffing the power-on boot load) lives on its own page: **[docs/nrf9e5-firmware.md](docs/nrf9e5-firmware.md)**. This is bench work not yet done — no nRF9E5 dump is checked in.
+The on-air radio format lives in the nRF9E5's embedded 8051, which has no internal non-volatile memory and boots its code from an external SPI memory. The plan for recovering that 8051 image lives on its own page: **[docs/nrf9e5-firmware.md](docs/nrf9e5-firmware.md)**. This is bench work not yet done — no nRF9E5 dump is checked in.
+
+## Radio decoding (rtl_433)
+The 868.35 MHz link between inner and outer units is being decoded for [rtl_433](https://github.com/merbanan/rtl_433/). Decoder spec and build instructions: **[docs/rtl433-decoder.md](docs/rtl433-decoder.md)**. Capture findings and frame dumps: **[docs/radio-capture-log.md](docs/radio-capture-log.md)**.
