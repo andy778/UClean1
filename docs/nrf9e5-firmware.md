@@ -1,171 +1,93 @@
-# nRF9E5 firmware extraction (Path C)
+# nRF9E5 firmware (Path C) — recovered from the U2 flash
 
-The MC9S08 flash (Path B) does **not** contain the on-air radio format: that CPU
-is only an SPI *slave* on a private MC9S08↔nRF9E5 message bus, so the Manchester
-encoding, the `fd 7a ba ba ba 83` header, the payload packing, and the nRF905
-`W_CONFIG` (channel / address / CRC) all live in the **nRF9E5's embedded 8051**,
-not in `dumps/u2-mc9s08gt-flash.s19`. This page is the plan for getting that
-8051 code out. It is bench work that has **not been done yet** — no nRF9E5 dump
-is checked in.
+**Result:** the nRF9E5's 8051 firmware — the code that owns the on-air radio
+format (software Manchester coding, the `fd 7a ba ba ba 83` header, payload
+packing, and the nRF905 `W_CONFIG` for channel / address / CRC) — is **embedded in
+the U2 flash we already have**. It is served to the nRF9E5 by U2 at power-on, not
+stored in a separate memory chip. It has been extracted to
+[`dumps/u1-nrf9e5-8051.bin`](../dumps/u1-nrf9e5-8051.bin) (1648 bytes).
 
-## Why you can't just "read the chip"
+This supersedes the earlier assumption that the radio code lived in an external
+boot EEPROM that had to be read or sniffed — there is no such chip on this board.
 
-U1 is a Nordic **nRF9E5** = nRF905 transceiver + an 8051 MCU. The 8051 has only
-**4 KB of program RAM** and **no on-chip non-volatile memory** — it cannot retain
-code across a power cycle. At every reset an internal boot ROM copies the program
-into that RAM **from an external serial memory over SPI** (the nRF9E5 drives the
-bus as master, selecting the memory with its `EECSN` chip-select), then runs it.
+## The architecture: U2 *is* the nRF9E5's boot memory
 
-So there is nothing persistent *inside* the chip to read out the way the MC9S08
-flash was read. "Dumping the nRF9E5 firmware" means capturing the code that lives
-in — or streams out of — that external boot memory.
+U1 is a Nordic **nRF9E5** = nRF905 transceiver + an 8051 MCU. The 8051 has 4 KB of
+program RAM and **no on-chip non-volatile memory** — at every reset its boot ROM
+copies the program in over SPI, with the nRF9E5 as bus **master**, then runs it.
 
-Bus roles are consistent with this: the Ghidra analysis found the MC9S08 is the
-SPI slave (`SPI1C1 = 0xcc`, `MSTR = 0` — see
-[ghidra-firmware-analysis.md](ghidra-firmware-analysis.md)). The nRF9E5 is the
-SPI master on the shared bus, both when reading its boot memory and when talking
-to the MC9S08.
+On a typical design that program sits in a small external SPI EEPROM. **This board
+has no such chip.** There is no serial-memory part next to U1; instead the
+nRF9E5's SPI lines run to **U2** (the MC9S08), and the debug/programming holes by
+the silkscreen **`BKGD`** text are the MC9S08 background-debug (BDM) header — the
+same port U2's flash was dumped through. So **U2 serves the nRF9E5 its boot
+image**: the MC9S08 acts as an SPI-slave EEPROM emulator and clocks the 8051
+program into the radio at power-on.
 
-## What the PCB photo shows
+This matches the firmware analysis: Ghidra found U2 is the SPI **slave**
+(`SPI1C1 = 0xcc`, `MSTR = 0` — see
+[ghidra-firmware-analysis.md](ghidra-firmware-analysis.md)), i.e. it responds to
+the nRF9E5 master. The *same* SPI link then carries the runtime MC9S08↔8051
+telemetry messages after boot.
 
-Reading [`docs/uclean1-pcb.png`](uclean1-pcb.png):
+## Where the image is, and how it was found
 
-- **U1 (nRF9E5)** is on the *main* board, marked `NRF 9E5 1438BS`. Beside it:
-  crystal **Y1**, the RF matching network, and the SMA antenna feed. **No 8-pin
-  memory chip sits next to U1** — only a crystal and passives.
-- The tilted board across the top is the **antenna board**, fed by the SMA on the
-  main board. It is edge-on in the photo and appears passive (antenna trace only,
-  no active parts) — not a carrier for a boot EEPROM.
-- The only serial-memory-style **8-pin SOIC** visible is a black part near **U2**
-  (marking approx. `8Z 768L / EA5`, flanked by C16/C17). The middle-right row of
-  identical SOICs are the output/gate drivers for the 8 screw-terminal channels,
-  not memory.
+The 8051 image is a contiguous blob inside `dumps/u2-mc9s08gt-flash.bin`:
 
-Open question this raises: that single 8-pin SOIC is the prime suspect for the
-boot memory, **but it may instead be U3** (the M24128, which is I2C and already
-dumped — see [u3-eeprom.md](u3-eeprom.md)). Resolve it on the bench before
-assuming anything (next section).
+| | |
+| --- | --- |
+| flash address | `0x80bb` – `0x872b` |
+| offset in the `.bin` | `0x703c` – `0x76ac` |
+| length | 1648 bytes (`0x670`) |
 
-## Two ways to get the 8051 image
+It was identified by its **8051 interrupt vector table** at the start (8051
+address `0x0000`):
 
-### 1. Read the boot memory directly
-
-First identify it with a multimeter, powered off. Buzz out the suspect 8-pin
-SOIC's pins against the nRF9E5:
-
-- If they land on nRF9E5 **SCK / MOSI / MISO + a chip-select (`EECSN`)** → this is
-  the boot store. Read it in-circuit or desoldered with a cheap SPI programmer
-  (CH341A + `flashrom`, or a Raspberry Pi). This is the direct analog of the
-  USBDM read done for U2.
-- If they land on **SDA / SCL** at the MC9S08 → it is just U3 (I2C), and the
-  nRF9E5's boot memory is a part not yet identified. Fall back to method 2, which
-  finds it regardless.
-
-### 2. Sniff the power-on boot load (recommended)
-
-This sidesteps having to visually identify or desolder anything. At reset the
-nRF9E5 masters the bus and streams its **entire** program (≤4 KB) in from the
-boot memory exactly once. Put a logic analyzer (even a low-cost Saleae clone) on
-the nRF9E5's **SCK / MOSI / MISO / EECSN** pins, power-cycle, and capture the
-boot sequence. Reconstruct the 8051 image from the SPI transaction — and as a
-side effect you learn which chip sourced it.
-
-## Bench setup — wiring & software
-
-### Step 0 — identify the pins (both methods)
-
-The boot memory is almost certainly a standard **25-series SPI EEPROM/flash** in
-an 8-pin SOIC, which has a fixed pinout — so once you find the chip you know its
-pins:
-
-| SOIC pin | 25-series name | Role                     |
-| ---      | ---            | ---                      |
-| 1        | CS#            | chip select (= `EECSN`)  |
-| 2        | SO / MISO      | data **out** (the code)  |
-| 3        | WP#            | write-protect → tie 3V3  |
-| 4        | VSS            | GND                      |
-| 5        | SI / MOSI      | data **in** (cmd/addr)   |
-| 6        | SCK            | clock                    |
-| 7        | HOLD#          | → tie 3V3                |
-| 8        | VCC            | **3.3 V** supply         |
-
-Power **off**, on continuity/diode mode confirm pins 1/2/5/6 reach the nRF9E5's
-`EECSN` / `MISO` / `MOSI` / `SCK`. If they instead land on the MC9S08's SDA/SCL,
-that SOIC is just U3 (I2C) — method 2 still finds the real one.
-
-> ⚠️ This is a **3.3 V** part — never put 5 V on it. Many CH341A programmers ship
-> at 5 V; use a 3.3 V-modified one (or a level shifter), or you will damage the
-> chip and back-feed the board.
-
-### Method 2 — logic-analyzer sniff (recommended, no desolder)
-
-Kit: any cheap 8-channel logic analyzer (an FX2 "Saleae clone", ~US$10) plus
-**[PulseView / sigrok](https://sigrok.org/)** (free) or Saleae Logic.
-
-Five clip leads (probe at the memory pins, or the same nets at the nRF9E5):
-
-| LA channel | Signal          | 25-series pin |
-| ---        | ---             | ---           |
-| D0         | CS# / `EECSN`   | 1             |
-| D1         | SCK             | 6             |
-| D2         | MOSI (cmd/addr) | 5             |
-| D3         | MISO (the code) | 2             |
-| GND        | board GND       | 4             |
-
-Capture:
-1. Sample at **≥ 24 MS/s** (≥ 4× the SPI clock; a clone's ~24 MS/s is plenty for a
-   boot clock of a few MHz).
-2. Trigger on **D0 (CS#) falling edge**, arm the capture.
-3. **Power-cycle the board.** At reset the nRF9E5 masters the bus and streams the
-   **entire** ≤ 4 KB image in exactly once.
-4. Add sigrok's **SPI decoder** (CS = D0 active-low, CLK = D1, MOSI = D2,
-   MISO = D3; try **mode 0** = CPOL 0 / CPHA 0 first). The loader sends a read
-   opcode (`0x03`) + address on MOSI, then the memory returns the image on
-   **MISO** — export that MISO byte stream to `dumps/u1-nrf9e5-8051.bin`.
-
-### Method 1 — direct read with an SPI programmer
-
-Kit: a **CH341A** USB programmer (3.3 V!) with a SOIC-8 test clip, or a Raspberry
-Pi on `spidev`, plus **[flashrom](https://www.flashrom.org/)**.
-
-The chip shares the bus with the nRF9E5, so keep the nRF9E5 from driving it:
-- **best:** desolder the SOIC and read it in the clip / on a breadboard, or
-- clip it in place **with the board unpowered** (and the nRF9E5 held in reset).
-
-Wire the clip to the 25-series pinout above:
-
-| Programmer | → 25-series pin              |
-| ---        | ---                          |
-| CS         | 1 CS#                        |
-| MISO / DO  | 2 SO                         |
-| 3V3        | 8 VCC, plus 3 WP# and 7 HOLD# |
-| GND        | 4 VSS                        |
-| MOSI / DI  | 5 SI                         |
-| CLK        | 6 SCK                        |
-
-Read it:
-
-```bash
-flashrom -p ch341a_spi -r dumps/u1-nrf9e5-8051.bin           # CH341A
-# or on a Raspberry Pi:
-flashrom -p linux_spi:dev=/dev/spidev0.0,spispeed=1000 -r dumps/u1-nrf9e5-8051.bin
+```
+0x0000:  02 00 2b   LJMP 0x002B    ; reset
+0x000B:  02 02 56   LJMP 0x0256    ; timer 0
+0x0023:  02 02 9f   LJMP 0x029F    ; serial / SPI
+0x002B:  12 00 cb   LCALL 0x00CB   ; reset target -> init, then the
+                                   ; e4 93 f2 a3 08 b8 ... MOVC/MOVX
+                                   ; memory-clear + copy startup loop
 ```
 
-If flashrom can't auto-detect it, pass `-c <model>` (see `flashrom -L`) or read it
-as a generic 25xx part. The image is ≤ 4 KB (the 8051's RAM size).
+`02` = `LJMP`, `12` = `LCALL`, `93` = `MOVC A,@A+DPTR`, `f2` = `MOVX @R0,A` — all
+8051, none of them HCS08. The blob ends at its final `22` (`RET`), immediately
+before the HCS08 string table (`Dosing Cnt`, `P-in-mix On`, …). *(An earlier Ghidra
+pass mislabeled the leading `02 00 2b …` bytes as a "7-byte init message"; they are
+the 8051 reset vector.)*
 
-## After you have the image
+Extract it straight from the dump:
 
-The dump is **8051 machine code**. Disassemble it in Ghidra (it ships an 8051
-processor module) or with SDCC tooling. That is where to recover:
+```bash
+dd if=dumps/u2-mc9s08gt-flash.bin of=dumps/u1-nrf9e5-8051.bin \
+   bs=1 skip=$((0x703c)) count=$((0x670))
+```
 
-- the software **Manchester** encoder (confirms the raw `01→1` / `10→0`
-  convention the rtl_433 decoder assumes),
-- the constant **`fd 7a ba ba ba 83`** header construction,
-- the **payload byte packing** (would help resolve `[U5]`/`[U6]` in
-  [rtl433.md](rtl433.md)),
+(already checked in as [`dumps/u1-nrf9e5-8051.bin`](../dumps/u1-nrf9e5-8051.bin)).
+
+## Disassemble it (8051)
+
+Load `dumps/u1-nrf9e5-8051.bin` in Ghidra with the **8051** processor
+(`8051:BE:16:default`), image base `0x0000`, and let it follow the vector table;
+or use SDCC's `sdas` / `d52`. Targets to recover:
+
+- the software **Manchester** encoder (confirms the `01→1` / `10→0` convention the
+  rtl_433 decoder assumes),
+- the **`fd 7a ba ba ba 83`** header construction,
+- the **payload byte packing** (resolves `[U5]` / `[U6]` in [rtl433.md](rtl433.md)),
 - the nRF905 **`W_CONFIG`** write — RF channel, device address, and **CRC mode** —
   which closes the `[U4]` CRC question.
 
-Store any resulting dump under `dumps/` following the existing
-`<designator>-<part>-<kind>` convention, e.g. `dumps/u1-nrf9e5-8051.bin`.
+Because this is board **A**'s image, confirm the `SW Ver:` / `Proc Ver:` match
+board B before using it to explain board-B on-air captures (see the two-boards
+note in the [README](../README.md)).
+
+## Optional: confirm the boot-serve on the bench
+
+Not needed to get the image, but to *watch* U2 feed the radio: put a logic
+analyzer on the SPI between U2 and the nRF9E5 (`SCK` / `MOSI` / `MISO` + the
+nRF9E5 chip-select) and power-cycle. You will see the nRF9E5 master-read these
+same 1648 bytes out of U2 at reset — the direct confirmation of the boot-serve
+architecture above.
