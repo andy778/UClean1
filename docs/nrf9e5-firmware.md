@@ -84,6 +84,27 @@ Because this is board **A**'s image, confirm the `SW Ver:` / `Proc Ver:` match
 board B before using it to explain board-B on-air captures (see the two-boards
 note in the [README](../README.md)).
 
+## First-pass disassembly
+
+Loaded headless in Ghidra (`8051:BE:16:default`, base `0x0000`) — **777
+instructions, code `0x0000`–`0x066f`** (the extract is code-complete; a small
+initialized-data segment that crt0 copies from code `0x679` sits just past it).
+Structure:
+
+- **Reset `0x0000` → `0x2B`:** `MOV SP,#0x7F`, then a standard crt0 (clear IRAM /
+  XRAM, copy XINIT from `0x679`) into the main loop at `0x26`.
+- **ISRs:** timer 0 at `0x0256`, serial/SPI at `0x029F` (the vectors at `0x0B`
+  and `0x23`).
+- **Peripheral init `0x0120`:** `TMOD=0x01`, Timer0 reload `TH0:TL0 = 0x8AD0`,
+  `SCON=0x50` (UART mode 1) — plus writes to the **nRF9E5 radio SFRs**
+  `0x90`/`0x93`/`0x94`/`0x95`/`0x96`/`0x97` and `0x98`.
+
+The nRF905 **channel, address and CRC mode** are set by those radio-SFR writes.
+Reading the exact values out is the next step: map SFRs `0x90`–`0x9F` against the
+nRF9E5 register table (the [datasheet](https://web.archive.org/web/20240428224643/https://infocenter.nordicsemi.com/pdf/nRF9E5_PS_v1.6.pdf))
+and follow the config-write routine — that closes the `[U4]` CRC / channel
+question in [rtl433.md](rtl433.md).
+
 ## Optional: confirm the boot-serve on the bench
 
 Not needed to get the image, but to *watch* U2 feed the radio: put a logic
