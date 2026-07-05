@@ -94,9 +94,14 @@ line), and bit 4 of that value (`MSTR`) is **0** → the MC9S08 is the SPI
 **slave**. So the nRF9E5's embedded 8051 is the SPI master and owns the nRF905
 `W_CONFIG` (channel / address / CRC).
 
-**Consequence:** the radio configuration is **not present in `dumps/u2-mc9s08gt-flash.s19`**.
-Recovering it needs either an SDR capture of the 868.35 MHz link or a dump of
-the nRF9E5's internal 8051 program memory. The `SPI1D` accesses around
+**Consequence — updated:** the radio config is *not built by the MC9S08 code*,
+but the nRF9E5's whole 8051 program **is stored in this flash after all**. The
+board has no external boot EEPROM; U2 serves the nRF9E5 its 8051 image over this
+same SPI link at power-on (MCU-as-EEPROM-emulator), so the image sits in the dump
+as a data blob — a 1648-byte 8051 program at flash **`0x80bb`** (file `0x703c`),
+extracted to `dumps/u1-nrf9e5-8051.bin`. The nRF905 `W_CONFIG` (channel / address
+/ CRC) is inside *that* image, not the HCS08 code. See
+[nrf9e5-firmware.md](nrf9e5-firmware.md). The `SPI1D` accesses around
 `0xBD5B–0xBDB1` are the slave's byte handling, not config setup.
 
 ### I2C → M24128 (U3) EEPROM access layer
