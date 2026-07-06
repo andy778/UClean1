@@ -22,7 +22,9 @@ the `#define`-able names for it, already wired into the rtl_433 decoder's
 #define UCLEAN1_MSG_HEARTBEAT       0x24  // poll opcode, not an alarm type
 ```
 
-Only `0x20` has been captured on air so far.
+Confirmed on air (boot-burst capture 2026-07-06): `0x20`/`0x21`/`0x22`/`0x23`
+all with `state=0`; only `0x26` (device_fault) still uncaptured (dropped in the
+burst).
 
 ## 2. EEPROM alarm-table byte (`0x0000–0x05BF` table, 12 values) — from the dump
 

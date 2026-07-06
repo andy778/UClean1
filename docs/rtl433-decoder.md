@@ -53,10 +53,9 @@ has no numeric display, so the radio only carries what the panel can *show*: the
 
 ## What's still open
 
-- Only alarm type `0x20` (status/OK) has been seen on air. The other four
-  (`0x21`–`0x26`) fire in the boot burst — need a capture **started before
-  power-on**, with `-Y minmax`, to record all five and confirm the
-  type→symbol map ([docs/ghidra/codes.md](ghidra/codes.md)) empirically.
+- 4 of 5 alarm types confirmed on air (`0x20`/`0x21`/`0x22`/`0x23`, boot burst
+  2026-07-06, all `state=0`). Only `0x26` (device_fault) still needs catching —
+  it was dropped in that burst; one more boot capture (`-Y minmax`) gets it.
 
 ## Build & test
 
