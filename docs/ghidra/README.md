@@ -42,9 +42,8 @@ So the CRC-16, the header bytes, the correlation words, and the alarm
 | [`radio_frame.c`](radio_frame.c) | Builds the 32-byte nRF905 payload + CRC (`FUN_db22` → `FUN_ced9` → `FUN_ce01`). |
 | [`crc16.c`](crc16.c) | The CRC-16 update (`FUN_e0cd`/`FUN_e08e`, tables `0x8b14`/`0x8b24`). |
 | [`alarm_frames.c`](alarm_frames.c) | The 5 alarm/status message types → the 5 infopanel symbols (`FUN_e372`/`e427`/`e0e5`). |
-| [`eeprom_i2c.c`](eeprom_i2c.c), [`periph_init.c`](periph_init.c) | I2C EEPROM access and peripheral bring-up. |
 | [`nrf9e5_full.c`](nrf9e5_full.c) | **Full decompile, U1 (nRF9E5's embedded 8051)** — every function, incl. the actual radio TX-send routine with carrier-sense backoff. |
-| [`mc9s08gt32_full.c`](mc9s08gt32_full.c) | **Full decompile, U2 (MC9S08GT32ACFBE)** — all 266 recovered functions; the curated files above are excerpts of this. |
+| [`mc9s08gt32_full.c`](mc9s08gt32_full.c) | **Full decompile, U2 (MC9S08GT32ACFBE)** — all 266 recovered functions; the 3 curated files above are excerpts of this with added line-by-line annotation. I2C EEPROM access (`FUN_a554`/`FUN_ded1`/`FUN_dfd2`/`FUN_df6a`) and peripheral init (`FUN_fe80`) are in here too, un-annotated - grep by function name (see [ghidra-firmware-analysis.md](../ghidra-firmware-analysis.md)). |
 | [`register-map.md`](register-map.md) | Every peripheral register either decompile touches, checked against the chips' own datasheets (nRF9E5 PS v1.6, MC9S08GB/GT data sheet). |
 | [`codes.md`](codes.md) | The 3 separate E-code/S-code/radio-type numbering spaces from the manual + firmware, kept apart (they alias). |
 
