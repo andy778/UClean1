@@ -52,20 +52,59 @@ copy error here**: EEPROM code `0x20` = "High water; outlet" (`E032`), but
 radio type `0x20` = "status/OK". They are unrelated numbers that happen to
 match — always qualify which table a bare `0x20` belongs to.
 
-## 3. Manual S-codes (`S101`–`S408`) — display/SMS text, not seen as a firmware constant yet
+## 3. Manual S-codes (`S101`–`S408`) — SOLVED: it's arithmetic, not a lookup table
 
-The treatment-cycle phase codes from the manual
-([`u2-serial-protocol.md`](../u2-serial-protocol.md) `PLANT STATUS:S102`).
-These come back as an **ASCII string** over the serial CODE interface, not a
-byte we've traced to a firmware constant table yet — unlike the two byte
-codes above, we don't have a confirmed RAM offset or lookup table for "which
-integer produces `S102`". `RAM 0x0613/0x0614` is the empirically-confirmed
-*source* (docs/u2-serial-protocol.md), but the cycle-number -> `Sxxx` string
-mapping itself hasn't been walked in Ghidra yet.
+`RAM 0x0613` = phase-within-cycle, `RAM 0x0614` = cycle number (1=cleaning,
+2=waiting, 3=maintenance, 4=test — capped `< 5` where it's set,
+[`mc9s08gt32_full.c:5070`](mc9s08gt32_full.c)). The S-code is simply:
 
-**Open item for next session:** find the string-table lookup that turns the
-current cycle/phase index into `"S102"` etc. (likely near the cycle/phase
-label table at EEPROM `0x0040–0x031B`, [`eeprom-map.md`](../eeprom-map.md)) -
-that would let us assign real firmware offsets/values to
-`UCLEAN1_S_AERATION` and friends, the same way the two tables above already
-have one.
+```c
+#define UCLEAN1_SCODE(cycle, phase)  (100 * (cycle) + (phase))  // "S<cycle><phase:02>"
+```
+
+Confirmed against the raw EEPROM phase table
+([`dumps/u3-m24128-eeprom.bin`](../../dumps/u3-m24128-eeprom.bin)
+`0x0040–0x031B`), which stores an **explicit 1-byte phase index right before
+each phase label** (not just positional order — this is a hard byte-level
+check, done by reading the dump directly):
+
+```
+offset  idx  label                  offset  idx  label
+0x004c  (1)  Cleaning cycle         0x027c  (1)  Waiting I    [cycle 3]
+0x0063   01  1 High water?          0x0289  0b   3 High water?
+0x007d   02  1 Pre-Aeration         0x029c   03  3 Aeration
+0x0097   03  1 Aeration             0x02aa   04  3 Pump-in
+0x00ac   04  1 Chemical filling     0x02bb   05  3 Waiting II
+0x00c5   05  1 Dosing               0x02cf   06  3 Sludge removal
+0x00dd   06  1 Mixing
+0x00f7   07  1 Sedimentation I
+0x0111   08  1 Sludge removal
+0x012c   09  1 Sedimentation II
+0x0145   0a  1 Pump-out
+0x015d   0b  1 Start-up level?
+0x0178   0c  1 Pump-in
+0x0193   0d  1 Start-up level?
+```
+
+Cycle 1's 13 raw phase indices confirm the doc's existing phase-order table
+([`eeprom-map.md`](../eeprom-map.md)) byte-for-byte — no reordering needed.
+
+**One naming nuance, not a numbering conflict:** the captured live example
+(board A, [`u2-serial-protocol.md`](../u2-serial-protocol.md)) was
+`DAT_0614=1, DAT_0613=2` -> `S102`. EEPROM's own label for cycle1/phase2 is
+`"Pre-Aeration"`, while the manual's S-code table calls `S102` **"Aeration"**.
+Same number, same formula, just the manual's plain-language gloss doesn't
+distinguish "Pre-Aeration" from "Aeration" as sharply as the firmware's
+internal label does — not a sign the formula or the phase order is wrong.
+
+## 4. "Service device" — not found yet, no evidence in the message-building code
+
+Every call site that builds a radio message (`FUN_db22`/`FUN_ced9`/`FUN_cf51`,
+grepped across the full [`mc9s08gt32_full.c`](mc9s08gt32_full.c)) only ever
+uses the same 3 body lengths (`N`=0 ack, 1 heartbeat, 2 alarm) and the same 5
+type bytes documented above — no sign of a 6th type or a longer body coming
+from anywhere in U2's own radio-send code. So if there's a separate physical
+service tool, it isn't feeding the 868 MHz link through code we've decompiled
+so far; it would have to be a different interface entirely (the serial `CODE
+RS` port? a BDM connection? something on the front panel?) — worth pinning
+down what the device actually is/does before chasing this further.

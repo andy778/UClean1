@@ -70,6 +70,13 @@ a phase-index byte, then a label of the form `"<cycle#> <PhaseName>"`.
 | 3     | Keep-alive cycle | Waiting I, High water?, Aeration, Pump-in, Waiting II, Sludge removal |
 | 4     | Test cycle       | Pump-in, Sludge removal, Pump-out, Chemical filling, Dosing, Aeration |
 
+**This phase-index byte is the manual's `S`-code, directly.** Confirmed in
+firmware (RAM `0x0613`=phase, `0x0614`=cycle,
+[`docs/ghidra/codes.md`](ghidra/codes.md)): `Snnn = 100*cycle + phase-index`,
+where `phase-index` is exactly this byte. E.g. cycle 1 phase-index 2
+("Pre-Aeration" above) = `S102`, the captured live example
+([`u2-serial-protocol.md`](u2-serial-protocol.md)).
+
 ### `0x03D4–0x04CF` — alarm / status message table
 
 Each entry is a **1-byte message code** followed by the display text. These are
