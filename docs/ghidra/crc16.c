@@ -13,6 +13,7 @@
  */
 
 /* ---- FUN_e0cd : update CRC with one byte (high nibble then low nibble) ----- */
+/* aka crc16_update_byte. */
 e0cd  PSHA
 e0ce  AIS #-0x2
 e0d0  STHX 0x1,SP
@@ -27,6 +28,7 @@ e0e2  AIS #0x3
 e0e4  RTS
 
 /* ---- FUN_e08e : fold one nibble via the 256->16 CRC tables ----------------- */
+/* aka crc16_fold_nibble. Called twice by crc16_update_byte, once per nibble. */
 e08e  PSHX
 e08f  PSHH
 e090  PSHA
