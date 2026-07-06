@@ -12,9 +12,13 @@
  *   0x23  DAT_074f                       0x33 (E051)       sludge-empty reminder
  *   0x26  DAT_0747 + array 0x0717..      0x2F,0x28-0x2D    device fault "!"
  *
- * FUN_e372 = reset/all-clear: sends all 5 types with state 0 at boot.
- * FUN_e427 = periodic: sends each type with its live boolean.
- * FUN_e0e5 = event-driven: sends a type ONLY when its state changed (edge).
+ * FUN_e372 (aka alarm_reset_broadcast_all) = reset/all-clear: sends all 5
+ *   types with state 0. Runs at boot AND on the styrskåp's own green Test
+ *   button's 10-14s long-press (see docs/ghidra/codes.md §5) - same routine.
+ * FUN_e427 (aka alarm_broadcast_current_state) = periodic: sends each type
+ *   with its live boolean.
+ * FUN_e0e5 (aka alarm_change_detector) = event-driven: sends a type ONLY when
+ *   its state changed (edge).
  *
  * Alarm codes -> E-codes are in docs/eeprom-map.md. Because live alarms are
  * edge-driven (FUN_e0e5), an idle capture shows only the two heartbeat frames;
@@ -22,6 +26,9 @@
  */
 
 /* ---- FUN_e372 @ e372 : reset -> emit all 5 symbols as "clear" -------------- */
+/* aka alarm_reset_broadcast_all(param_1). param_1 distinguishes boot (0) from */
+/* the Test-button long-press (1) - only affects one EEPROM-error check below, */
+/* the alarm-table clear + 5-message broadcast is identical either way.       */
 void FUN_e372(char param_1)
 {
   undefined1 extraout_HI, extraout_HI_00, extraout_HI_01, extraout_HI_02;
@@ -71,6 +78,9 @@ void FUN_e372(char param_1)
 }
 
 /* ---- FUN_e427 @ e427 : periodic -> emit all 5 with their live booleans ----- */
+/* aka alarm_broadcast_current_state. Calls FUN_de1b (aka                    */
+/* send_heartbeat_poll_and_wait, in mc9s08gt32_full.c) first - only proceeds  */
+/* if that poll/ack round-trip succeeded.                                    */
 void FUN_e427(void)
 {
   bool bVar1;
@@ -103,9 +113,10 @@ void FUN_e427(void)
 }
 
 /* ---- FUN_e0e5 @ e0e5 : edge-driven -> emit a type only when its state moved  */
-/* Each block compares a "last-sent" shadow (0758/0700/06f8.../075c/0750/0748)   */
-/* against the live value; on a change it updates the shadow and calls FUN_db22  */
-/* with the new boolean. This is why alarms are NOT in the idle heartbeat.       */
+/* aka alarm_change_detector. Each block compares a "last-sent" shadow          */
+/* (0758/0700/06f8.../075c/0750/0748) against the live value; on a change it    */
+/* updates the shadow and calls FUN_db22 (aka queue_radio_message) with the     */
+/* new boolean. This is why alarms are NOT in the idle heartbeat.               */
 void FUN_e0e5(char param_1,char param_2)
 {
   bool bVar1;
