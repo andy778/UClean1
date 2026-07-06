@@ -6,7 +6,6 @@
 //      or: tools/analyze-8051.sh DecompileAll.java <outfile>
 import ghidra.app.script.GhidraScript;
 import ghidra.app.decompiler.DecompInterface;
-import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.FunctionManager;
@@ -29,12 +28,7 @@ public class DecompileAll extends GhidraScript {
         for (FunctionIterator it = fm.getFunctions(true); it.hasNext();) {
             Function f = it.next();
             if (f.isThunk() || f.isExternal()) continue;
-            out.println("########## " + f.getName() + " @ " + f.getEntryPoint()
-                    + "  size=" + f.getBody().getNumAddresses() + " ##########");
-            DecompileResults res = di.decompileFunction(f, 60, monitor);
-            out.println((res != null && res.getDecompiledFunction() != null)
-                    ? res.getDecompiledFunction().getC() : "<decompile failed>");
-            out.println();
+            DecompileUtil.printDecompiled(di, f, monitor, out);
             n++;
         }
         out.println("// function_count=" + n);

@@ -8,9 +8,10 @@ this page exists to keep them apart and give each a `#define`-able name.
 
 ## 1. Radio message type (`payload[11]`, 5 values) — CONFIRMED in firmware
 
-The 5 values `FUN_e372`/`FUN_e427` send over the air, one per indoor
-info-panel symbol (see [`alarm_frames.c`](alarm_frames.c),
-[`README.md`](README.md)):
+Meanings and live sources are the canonical table in
+[`README.md`](README.md#the-5-message-types--panel-symbols); these are just
+the `#define`-able names for it, already wired into the rtl_433 decoder's
+`msg_type`/`msg_name` fields (`add-uponor-clean1` branch):
 
 ```c
 #define UCLEAN1_MSG_STATUS          0x20  // OK / green LED
@@ -21,16 +22,16 @@ info-panel symbol (see [`alarm_frames.c`](alarm_frames.c),
 #define UCLEAN1_MSG_HEARTBEAT       0x24  // poll opcode, not an alarm type
 ```
 
-Already wired into the rtl_433 decoder's `msg_type`/`msg_name` fields
-(`add-uponor-clean1` branch). Only `0x20` has been captured on air so far.
+Only `0x20` has been captured on air so far.
 
 ## 2. EEPROM alarm-table byte (`0x0000–0x05BF` table, 12 values) — from the dump
 
-The 1-byte code at the start of each entry in the EEPROM's alarm/status
-message table ([`eeprom-map.md`](../eeprom-map.md)). This is a **different,
-finer-grained** numbering than the radio type above — e.g. radio type `0x26`
-("device fault") corresponds to *five* of these EEPROM codes (one per failed
-actuator):
+The 1-byte code at the start of each entry in
+[`eeprom-map.md`](../eeprom-map.md)'s alarm/status message table — a
+**different, finer-grained** numbering than the radio type above (e.g. radio
+type `0x26` "device fault" covers *five* of these, one per failed actuator).
+`#define`-able names, cross-referenced to which radio type each rolls up
+into:
 
 ```c
 #define UCLEAN1_E_NO_RADIO_CONN     0x02  // -> E011

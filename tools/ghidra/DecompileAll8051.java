@@ -1,14 +1,19 @@
 // Full decode of the nRF9E5's embedded 8051 image: seed disassembly from the
-// interrupt vector table + known routines (same seeds as Dump8051.java), then
-// follow every CALL/ACALL/LCALL target transitively to find the rest of the
-// code (the auto-analyzer finds 0 functions on a raw image with no declared
-// entry point), create a function at each call target, and decompile all of
-// them to one file.
+// interrupt vector table + known routines (Nrf9e5Seeds.ADDRS, same seeds as
+// Dump8051.java), then follow every CALL/ACALL/LCALL target transitively to
+// find the rest of the code (the auto-analyzer finds 0 functions on a raw
+// image with no declared entry point), create a function at each call
+// target, and decompile all of them to one file.
+//
+// This only follows CALL-type flows, not jumps/branches within a seed's own
+// body, so it can still miss functions reached only via a branch the linear
+// scan from an earlier seed doesn't pass through (this happened for two
+// functions in this image - see docs/ghidra/nrf9e5_full.c's header comment
+// for how those were force-decompiled separately and folded in by hand).
 //
 // Run via: tools/analyze-8051.sh DecompileAll8051.java <outfile>
 import ghidra.app.script.GhidraScript;
 import ghidra.app.decompiler.DecompInterface;
-import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Instruction;
@@ -28,41 +33,29 @@ public class DecompileAll8051 extends GhidraScript {
             return;
         }
 
-        long[] seeds = {
-            0x0000, 0x002b, 0x00cb, 0x0256, 0x029f, 0x0156, 0x01c8, 0x02fb,
-        };
-
         Set<Long> funcStarts = new LinkedHashSet<>();
         Deque<Long> work = new ArrayDeque<>();
-        for (long s : seeds) { work.add(s); }
+        for (long s : Nrf9e5Seeds.ADDRS) { work.add(s); }
 
         Listing listing = currentProgram.getListing();
-        Set<Long> disassembled = new LinkedHashSet<>();
 
         while (!work.isEmpty()) {
             long a = work.poll();
-            if (!disassembled.add(a)) continue;
+            if (!funcStarts.add(a)) continue;
             try { disassemble(toAddr(a)); } catch (Exception e) { continue; }
-            funcStarts.add(a);
 
             // Walk forward from this seed collecting call targets until we hit
-            // a RET/RETI or fall off into already-visited territory.
-            Address cur = toAddr(a);
-            for (int i = 0; i < 4000; i++) {
-                Instruction ins = listing.getInstructionAt(cur);
-                if (ins == null) break;
+            // a RET/RETI or run off the end of disassembled code.
+            for (InstructionIterator it = listing.getInstructions(toAddr(a), true); it.hasNext();) {
+                Instruction ins = it.next();
                 String mn = ins.getMnemonicString();
                 if (mn.equals("CALL") || mn.equals("ACALL") || mn.equals("LCALL")) {
-                    Address[] flows = ins.getFlows();
-                    for (Address f : flows) {
+                    for (Address f : ins.getFlows()) {
                         long fo = f.getOffset();
-                        if (!disassembled.contains(fo)) work.add(fo);
+                        if (!funcStarts.contains(fo)) work.add(fo);
                     }
                 }
                 if (mn.equals("RET") || mn.equals("RETI")) break;
-                Address next = ins.getMaxAddress().add(1);
-                if (next.equals(cur)) break;
-                cur = next;
             }
         }
 
@@ -81,12 +74,7 @@ public class DecompileAll8051 extends GhidraScript {
         for (Long a : funcStarts) {
             Function f = getFunctionAt(toAddr(a));
             if (f == null) continue;
-            out.println("########## " + f.getName() + " @ " + f.getEntryPoint()
-                    + "  size=" + f.getBody().getNumAddresses() + " ##########");
-            DecompileResults res = di.decompileFunction(f, 60, monitor);
-            out.println((res != null && res.getDecompiledFunction() != null)
-                    ? res.getDecompiledFunction().getC() : "<decompile failed>");
-            out.println();
+            DecompileUtil.printDecompiled(di, f, monitor, out);
             n++;
         }
         out.println("// function_count=" + n);
