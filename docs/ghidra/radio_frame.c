@@ -7,18 +7,25 @@
  * see docs/nrf9e5-firmware.md — so all payload semantics live here.
  *
  * Call chain for one radio message:
- *   FUN_db22(type)  -> snapshots the correlation words + direction, then
- *   FUN_ced9(...)   -> assembles the frame, then
- *   FUN_ce01(...)   -> serialises bytes and runs the CRC, then
- *   FUN_e0cd/e08e   -> CRC-16/CCITT-FALSE nibble update (tables 0x8b14 / 0x8b24).
+ *   FUN_db22 (queue_radio_message)      -> snapshots the correlation words +
+ *                                           direction, then
+ *   FUN_ced9 (assemble_and_send_frame)  -> assembles the frame, then
+ *   FUN_ce01 (serialize_frame_and_crc)  -> serialises bytes and runs the CRC, then
+ *   FUN_e0cd/e08e (crc16_update_byte/crc16_fold_nibble) -> CRC-16/CCITT-FALSE
+ *                                           nibble update (tables 0x8b14 / 0x8b24).
+ *
+ * The names in parens are this file's own shorthand (not Ghidra's) - used in
+ * the comments below and cross-referenced from other docs. The real,
+ * addressable identifier is always the FUN_xxxx form.
  *
  * See docs/rtl433-decoder.md for the resulting on-air byte map.
  */
 
 /* ---- FUN_db22 @ db22 : queue one radio message of a given "type" ---------- */
-/* Snapshots the four poll/ack correlation words (013e,0140,0109,010b) and the  */
-/* direction/marker bytes, stores the message TYPE in DAT_06be/06bf, then calls */
-/* the assembler FUN_ced9. local_6 = 0x40 is the direction marker (poll).       */
+/* aka queue_radio_message(type). Snapshots the four poll/ack correlation      */
+/* words (013e,0140,0109,010b) and the direction/marker bytes, stores the      */
+/* message TYPE in DAT_06be/06bf, then calls the assembler FUN_ced9. local_6 = */
+/* 0x40 is the direction marker (poll).                                        */
 void FUN_db22(undefined1 param_1)   /* param_1 = message type (0x20..0x26) */
 {
   char cVar1;
@@ -55,9 +62,10 @@ void FUN_db22(undefined1 param_1)   /* param_1 = message type (0x20..0x26) */
 }
 
 /* ---- FUN_ced9 @ ced9 : assemble the frame into the SPI-out buffer ---------- */
-/* Copies fields with FUN_9fc9(memcpy), sets the CRC anchor (066b=0x66d), calls  */
-/* FUN_ce01 to serialise+CRC, FUN_8eb2 kicks the SCI/SPI transmitter. When the   */
-/* direction byte at +9 == '@' (0x40, a poll) it also arms the ack-wait timer.   */
+/* aka assemble_and_send_frame. Copies fields with FUN_9fc9 (aka memcpy_bytes), */
+/* sets the CRC anchor (066b=0x66d), calls FUN_ce01 to serialise+CRC, FUN_8eb2  */
+/* (aka sci_kick_transmit) kicks the SCI/SPI transmitter. When the direction    */
+/* byte at +9 == '@' (0x40, a poll) it also arms the ack-wait timer.            */
 void FUN_ced9(undefined2 param_1)
 {
   undefined1 uVar1, uVar2, in_stack_00000000, uStack_1;
@@ -81,7 +89,8 @@ void FUN_ced9(undefined2 param_1)
 }
 
 /* ---- FUN_ce01 @ ce01 : serialise payload bytes + running CRC --------------- */
-/* uStack_8/uStack_7 = the CRC accumulator, seeded to 0xFFFF by FUN_e088.        */
+/* aka serialize_frame_and_crc. uStack_8/uStack_7 = the CRC accumulator,        */
+/* seeded to 0xFFFF by FUN_e088 (aka crc16_seed).                                */
 /* cStack_3 = payload[0] = record[8] + record[0xb] + 12.                         */
 /* bStack_2 = payload[3] = ((record[8]&3)<<4) | record[9] | 0x0f  (record[9] is  */
 /*            the direction: 0x40 poll / 0x80 response).                         */
@@ -130,4 +139,5 @@ void FUN_ce01(undefined2 param_1)
 }
 
 /* ---- FUN_e088 @ e088 : seed the CRC accumulator to 0xFFFF ------------------ */
+/* aka crc16_seed. */
 void FUN_e088(undefined1 *param_1) { *param_1 = 0xff; param_1[1] = 0xff; return; }
