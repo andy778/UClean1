@@ -80,6 +80,26 @@ The two OC series interleave across the row as two descending runs (…OC14, OC7
 OC13, OC6, OC12, OC5… reading left to right), read off the high-resolution
 silkscreen in `docs/uclean1-pcb.png`.
 
+**Confirmed by silkscreen** (a second board photo, terminal-block edge): the
+output row's screw terminals are labelled, left to right, `MV1 Compressor`,
+`MV2`, `MV3`, `MV4`, `MV5`, `Spare`, `Alarm` — matching
+[docs/eeprom-map.md](docs/eeprom-map.md)'s EEPROM-derived fault table exactly
+(`E040` compressor, `E041`–`E045` = MV1–MV5) and confirming `Spare` as a genuine
+unused 7th channel, not a numbering gap. `Alarm` is a separate 2-pin terminal
+(not part of the output row) — likely a dry-contact/relay output for an
+external alarm siren or building-management input, not yet traced in firmware.
+
+Same photo also shows, near U2: a 3-digit 7-segment display, a physical
+push-button silkscreened **`Test`**, and a separate 4-pin header silkscreened
+**`Test btn`** (for an external test button) — plus a `TEST 464 PASSED` QC
+sticker. No matching string exists in the U2 flash (checked via `strings`), so
+this is most likely a **factory test-jig interface** (assembly-line QC step),
+not a field service feature — kept distinct from the still-open "handheld
+service device" question in
+[docs/ghidra/codes.md](docs/ghidra/codes.md#4-service-device--rf-no-pairing-not-ir-two-solid-leads-no-capture-yet).
+Also visible: a gold SMA-style antenna connector next to U1, and the `Modem`
+header from [docs/u2-serial-protocol.md](docs/u2-serial-protocol.md).
+
 ## I2C Memory (U3, 128-Kbit / 16 KB)
 U3 is an M24128 EEPROM on the I2C bus at address `0x50`, read with a Raspberry Pi
 and i2c-tools. Wiring the Pi to the chip, reading the full 16 KB (the `i2cdump`
