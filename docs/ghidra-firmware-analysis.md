@@ -57,6 +57,11 @@ tools/analyze.sh DecompileCallers.java eeprom_i2c.c a554 ded1 dfd2 df6a
 tools/analyze.sh DecompileCallers.java periph_init.c fe80
 ```
 
+(The two targeted files these commands produce are no longer kept separately -
+they were a byte-identical subset of what's now the full dump,
+[`docs/ghidra/mc9s08gt32_full.c`](ghidra/mc9s08gt32_full.c), with no unique
+annotation. `grep` that file for the function names below instead.)
+
 ### Gotchas hit along the way
 
 - **Scripts must be Java, not Python.** This Ghidra build was not started with
@@ -89,8 +94,8 @@ Auto-analysis recovers ~267 functions.
 
 `0xBD56` is the **SPI receive interrupt handler** — vector `0xFFE0` holds
 `BD 56`. Peripheral init then writes `SPI1C1 = 0xCC`
-([`docs/ghidra/periph_init.c`](ghidra/periph_init.c), the `SPI1C1 = 0xcc;`
-line), and bit 4 of that value (`MSTR`) is **0** → the MC9S08 is the SPI
+(`FUN_fe80` in [`docs/ghidra/mc9s08gt32_full.c`](ghidra/mc9s08gt32_full.c),
+the `SPI1C1 = 0xcc;` line), and bit 4 of that value (`MSTR`) is **0** → the MC9S08 is the SPI
 **slave**. So the nRF9E5's embedded 8051 is the SPI master and owns the nRF905
 `W_CONFIG` (channel / address / CRC).
 
@@ -106,8 +111,9 @@ extracted to `dumps/u1-nrf9e5-8051.bin`. The nRF905 `W_CONFIG` (channel / addres
 
 ### I2C → M24128 (U3) EEPROM access layer
 
-Bus driver region `0xDED1–0xE03A`. Full decompiled C:
-[`docs/ghidra/eeprom_i2c.c`](ghidra/eeprom_i2c.c).
+Bus driver region `0xDED1–0xE03A`. Full decompiled C in
+[`docs/ghidra/mc9s08gt32_full.c`](ghidra/mc9s08gt32_full.c) (search for
+`FUN_a554`).
 
 | Function | Role |
 | ---      | ---  |
@@ -123,8 +129,8 @@ There are length-typed wrappers around `FUN_a554` — e.g. `FUN_a631` (2 bytes),
 ### Peripheral init
 
 `FUN_fe80` runs from reset and configures the clock (ICG), ports, SCI, the I2C
-registers (`IIC1A/IIC1F/IIC1C`), and SPI (`SPI1C1/C2/BR`). Full C:
-[`docs/ghidra/periph_init.c`](ghidra/periph_init.c).
+registers (`IIC1A/IIC1F/IIC1C`), and SPI (`SPI1C1/C2/BR`). Full C in
+[`docs/ghidra/mc9s08gt32_full.c`](ghidra/mc9s08gt32_full.c).
 
 ### Where the EEPROM data really lives
 
