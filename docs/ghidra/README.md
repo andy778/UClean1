@@ -1,10 +1,41 @@
-# Ghidra decompiles — U2 firmware
+# Ghidra decompiles — U1 (nRF9E5) and U2 (MC9S08GT32) firmware
 
-Raw Ghidra output for the U2 (MC9S08GT) functions we relied on, kept here so the
-reasoning is checkable against the binary. Extracted from
-[`dumps/u2-mc9s08gt-flash.bin`](../../dumps/u2-mc9s08gt-flash.bin) with the
-scripts in [`tools/ghidra/`](../../tools/ghidra). Addresses are the RAM/flash
-addresses Ghidra shows (`file_offset + 0x107f`).
+Raw Ghidra output for both firmware images, kept here so the reasoning is
+checkable against the binaries — one full decompile per chip
+([`mc9s08gt32_full.c`](mc9s08gt32_full.c), [`nrf9e5_full.c`](nrf9e5_full.c)),
+plus curated excerpts of the functions we relied on most. Extracted from
+[`dumps/u2-mc9s08gt-flash.bin`](../../dumps/u2-mc9s08gt-flash.bin) /
+[`dumps/u1-nrf9e5-8051.bin`](../../dumps/u1-nrf9e5-8051.bin) with the scripts
+in [`tools/ghidra/`](../../tools/ghidra). MC9S08 addresses are the RAM/flash
+addresses Ghidra shows (`file_offset + 0x107f`); nRF9E5 addresses are 8051
+code-space offsets within the extracted image. Peripheral register names are
+checked against the chips' own datasheets in
+[`register-map.md`](register-map.md) — several nRF9E5 ones are ones Ghidra's
+generic 8051 module gets wrong or can't name at all.
+
+## Who writes the payload, who sends it
+
+Answering directly: **U2 (MC9S08) composes and writes every payload byte; U1
+(nRF9E5) never inspects it — it's a dumb relay that hands whatever arrives
+straight to the nRF905 radio.** Traced end-to-end across both full decompiles:
+
+1. U2's `FUN_db22` → `FUN_ced9` → `FUN_ce01` ([`radio_frame.c`](radio_frame.c))
+   builds the 32-byte message in RAM and pushes it out over the U2↔U1 serial
+   link byte-by-byte (`FUN_9fc9`/`FUN_8ec7`).
+2. U1's `F_3dc` (UART RX dispatcher, [`nrf9e5_full.c`](nrf9e5_full.c)) receives
+   those bytes and copies them **verbatim** into its own 32-byte ring buffer —
+   no transformation, no interpretation of content.
+3. U1's `FORCED_30b` (force-decompiled — outside the auto-walked call graph,
+   see the header of `nrf9e5_full.c`) is where transmission actually happens:
+   asserts the nRF905's chip select, sends the `W_TX_PAYLOAD` SPI opcode
+   (`0x20`, confirmed against the nRF905 instruction set in the nRF9E5
+   datasheet), shifts the ring-buffer bytes out, does carrier-sense collision
+   backoff (up to 5 retries), then keys the transmitter and waits for the
+   nRF905 to report the send complete.
+
+So the CRC-16, the header bytes, the correlation words, and the alarm
+`[type, state]` body are all **U2's** work; U1 contributes nothing to payload
+*content*, only the SPI mechanics of getting it on air.
 
 | File | What it covers |
 | --- | --- |
@@ -12,6 +43,10 @@ addresses Ghidra shows (`file_offset + 0x107f`).
 | [`crc16.c`](crc16.c) | The CRC-16 update (`FUN_e0cd`/`FUN_e08e`, tables `0x8b14`/`0x8b24`). |
 | [`alarm_frames.c`](alarm_frames.c) | The 5 alarm/status message types → the 5 infopanel symbols (`FUN_e372`/`e427`/`e0e5`). |
 | [`eeprom_i2c.c`](eeprom_i2c.c), [`periph_init.c`](periph_init.c) | I2C EEPROM access and peripheral bring-up. |
+| [`nrf9e5_full.c`](nrf9e5_full.c) | **Full decompile, U1 (nRF9E5's embedded 8051)** — every function, incl. the actual radio TX-send routine with carrier-sense backoff. |
+| [`mc9s08gt32_full.c`](mc9s08gt32_full.c) | **Full decompile, U2 (MC9S08GT32ACFBE)** — all 266 recovered functions; the curated files above are excerpts of this. |
+| [`register-map.md`](register-map.md) | Every peripheral register either decompile touches, checked against the chips' own datasheets (nRF9E5 PS v1.6, MC9S08GB/GT data sheet). |
+| [`codes.md`](codes.md) | The 3 separate E-code/S-code/radio-type numbering spaces from the manual + firmware, kept apart (they alias). |
 
 ## What the radio payload is
 
