@@ -70,6 +70,44 @@ a phase-index byte, then a label of the form `"<cycle#> <PhaseName>"`.
 | 3     | Keep-alive cycle | Waiting I, High water?, Aeration, Pump-in, Waiting II, Sludge removal |
 | 4     | Test cycle       | Pump-in, Sludge removal, Pump-out, Chemical filling, Dosing, Aeration |
 
+**Cycle 4 (`Test cycle`), full 8-phase list + real durations — from the manual**
+(installation manual, "Testfunktion"; matches this EEPROM entry's 6 named
+phases plus the two unnamed steps the durations-only reading missed):
+
+| S-code | Function (sv) | Meaning | Duration |
+| --- | --- | --- | --- |
+| `S401` | Inpumpning | Pump-in | 20 s |
+| `S402` | Slamtömning | Sludge removal | 20 s |
+| `S403` | Utpumpning | Pump-out | 5 s |
+| `S404` | Påfyllning av kemikaliepumpen | Chemical-pump fill | 90 s |
+| `S405` | Dosering av kemikalie | Chemical dosing | 10 s |
+| `S406` | Fällning (inga funktioner aktiva) | Precipitation/settling (no actuator on) | 10 s |
+| `S407` | Luftning I | Aeration I | 30 s |
+| `S408` | Luftning II | Aeration II | 30 s |
+
+Triggered by the styrskåp's own **green Test button** (not radio/serial): hold
+**5–10 seconds** (release when the display reaches `S__5`, i.e. `S405`) starts
+it; the display counts `1,2,3,4,S5,S6,S7…` while held, then shows `S400`, then
+runs the 8 steps above in order, then returns to the *satsräknare*. Also
+reachable via the PlantCare app (`Test > testcykel`).
+
+**Two other Test-button hold durations, same button:**
+- **< 5 seconds**: shows the current `PLANT STATUS` S-code (RAM
+  `0x0613`/`0x0614`, formula below) on the display for 30 seconds, then
+  reverts to the *satsräknare*.
+- **10–14 seconds**: resets the sludge-emptying reminder (only meaningful
+  while that reminder's fault code, `E051`/EEPROM code `0x33`, is showing).
+  Release and the display shows `E000` (no fault).
+
+Firmware-side, the long-press reset maps to `RAM 0x014a` (checked in the main
+loop `FUN_92fb`; when set, `FUN_93f8()` fires `FUN_e372(1)`, the same full
+alarm-table clear + rebroadcast that runs at power-on). The 5–10s test-cycle
+start likely runs through `FUN_ca4e` (sets the active cycle number), though
+that's less certain. Neither trigger's setter has been traced back to an
+actual GPIO read/hold-timer yet — see
+[docs/ghidra/codes.md](ghidra/codes.md) §5 for what's confirmed vs. still
+open.
+
 **This phase-index byte is the manual's `S`-code, directly.** Confirmed in
 firmware (RAM `0x0613`=phase, `0x0614`=cycle,
 [`docs/ghidra/codes.md`](ghidra/codes.md)): `Snnn = 100*cycle + phase-index`,

@@ -116,28 +116,56 @@ begin with. This would need confirming from a second unit's firmware to be
 certain, but it fits every observation so far without inventing a special
 protocol.
 
-**Lead B — `DAT_014a` (the test-cycle trigger) has no code path that sets it.**
-`FUN_92fb` (main loop) reads it twice and, if set, calls `FUN_93f8()`, which
-fires `FUN_e372(1)` (the full alarm-reset/boot burst) and then **clears**
-`DAT_014a` back to 0. A full cross-reference of every static instruction that
-touches address `0x014a` in the entire flash
-(`tools/ghidra/FindRefsInRange.java`, range `0x14a-0x14a`) finds exactly
-**one write — the clear in `FUN_93f8`.** Nothing in the 266 decompiled
-functions ever sets it to a nonzero value via a direct instruction. That
-doesn't mean it's dead code — HCS08 code all over this firmware uses
-*computed* stores (`STA ,X` / `STA ,H:X` with a runtime-computed address, as
-seen in the many `*pbVar = ...` pointer-loop patterns throughout the
-decompile) which Ghidra's static reference search cannot follow back to a
-literal address. So `DAT_014a` is very plausibly set that way, from
-somewhere we haven't isolated yet - but the receive path for whatever sets it
-is not among the RX handling we've already mapped (`FUN_caee`, the info-panel
-poll/ack validator, and `F_3dc`, the 8051's UART/ring-buffer dispatcher -
-neither writes arbitrary MC9S08 RAM addresses).
-
 **Most useful next step:** an actual RF capture while the service tool is in
 use would settle this empirically and sidestep the static-analysis limit
 entirely - if it rides the same `EAEAEAEA`/868.2 MHz link, `rtl_433` would
 show it directly as extra frames (with `mic=CRC` still matching, since it's
 the same hardware CRC). If you're ever near one when it's used, a capture
 running throughout would be the highest-value data point available right
-now — much more direct than further static tracing of computed stores.
+now — much more direct than further static tracing.
+
+*(An earlier version of this section speculated that `DAT_014a` might be
+this wireless device's trigger flag - that was wrong. `DAT_014a` is the
+styrskåp's own physical **Test button**, confirmed from the manual - see §5.
+Unrelated to the question above.)*
+
+## 5. The physical Test button - CONFIRMED from the manual, partially traced in firmware
+
+The styrskåp has a **green Test button**, wired (not wireless), documented in
+the Uponor installation manual with **three different hold durations**, each
+doing something different:
+
+| Hold | Action | Display behavior |
+| --- | --- | --- |
+| < 5 s | Show current `PLANT STATUS` S-code | `Snnn` for 30 s, then back to *satsräknare* |
+| 5–10 s | Start the **Test cycle** (EEPROM cycle 4, [eeprom-map.md](../eeprom-map.md)) | counts `1,2,3,4,S5,S6,S7…` while held, release at `S__5`; then `S400`, then the 8-step sequence |
+| 10–14 s | Reset the sludge-emptying reminder | counts seconds while held; release → `E000` |
+
+Two of the three are now tied to firmware, though neither trigger has a
+traceable static setter (same class of gap as the "computed store" cases
+elsewhere in this file):
+
+- **`DAT_014a`** (RAM `0x014a`) = the **10-14s long-press** trigger. `FUN_92fb`
+  (main loop) reads it and, if set, calls `FUN_93f8()` → `FUN_e372(1)` - the
+  full alarm-table clear + rebroadcast (the same routine that runs at
+  power-on). That's a broader reset than "just the sludge reminder," but
+  functionally identical in practice: if the sludge reminder is the only
+  active fault when the button is held (the manual's own use case), clearing
+  everything looks the same as clearing just that one.
+- The **5-10s "start Test cycle"** almost certainly runs through `FUN_ca4e`
+  (`DAT_0614 = param_1` - sets the active cycle number; its one known caller
+  passes an argument Ghidra's decompiler couldn't resolve statically) with
+  `param_1 = 4`. Not confirmed - `FUN_ca4e`'s only visible call site is deep
+  in the radio poll/ack processor (`FUN_caee`), which is an odd place for a
+  button handler and needs more tracing to confirm or rule out.
+- The **<5s "show status"** display behavior wasn't traced at all this pass -
+  it's presumably just reading the same `DAT_0613`/`DAT_0614` this file
+  already decodes and driving the display directly, without needing a radio
+  message.
+
+`FindRefsInRange.java` on `0x014a`, `0x0150`, and `0x0614` all show either no
+setter or a setter whose caller passes an unresolved argument - the actual
+button-read GPIO pin and hold-timer logic is still not pinned down. Given the
+green Test button and its "Test btn" external header are visible on the PCB
+([README.md](../../README.md)), the remaining piece is finding which GPIO
+port bit reads it and the timer/counter that measures the hold duration.
