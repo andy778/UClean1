@@ -71,25 +71,26 @@ a phase-index byte, then a label of the form `"<cycle#> <PhaseName>"`.
 | 4     | Test cycle       | Pump-in, Sludge removal, Pump-out, Chemical filling, Dosing, Aeration |
 
 **Cycle 4 (`Test cycle`), full 8-phase list + real durations — from the manual**
-(installation manual, "Testfunktion"; matches this EEPROM entry's 6 named
-phases plus the two unnamed steps the durations-only reading missed):
+(installation manual, "Test function" section; matches this EEPROM entry's 6
+named phases plus the two unnamed steps the durations-only reading missed):
 
-| S-code | Function (sv) | Meaning | Duration |
-| --- | --- | --- | --- |
-| `S401` | Inpumpning | Pump-in | 20 s |
-| `S402` | Slamtömning | Sludge removal | 20 s |
-| `S403` | Utpumpning | Pump-out | 5 s |
-| `S404` | Påfyllning av kemikaliepumpen | Chemical-pump fill | 90 s |
-| `S405` | Dosering av kemikalie | Chemical dosing | 10 s |
-| `S406` | Fällning (inga funktioner aktiva) | Precipitation/settling (no actuator on) | 10 s |
-| `S407` | Luftning I | Aeration I | 30 s |
-| `S408` | Luftning II | Aeration II | 30 s |
+| S-code | Step | Duration |
+| --- | --- | --- |
+| `S401` | Pump-in | 20 s |
+| `S402` | Sludge removal | 20 s |
+| `S403` | Pump-out | 5 s |
+| `S404` | Chemical-pump fill | 90 s |
+| `S405` | Chemical dosing | 10 s |
+| `S406` | Precipitation/settling (no actuator on) | 10 s |
+| `S407` | Aeration I | 30 s |
+| `S408` | Aeration II | 30 s |
 
 Triggered by the styrskåp's own **green Test button** (not radio/serial): hold
 **5–10 seconds** (release when the display reaches `S__5`, i.e. `S405`) starts
 it; the display counts `1,2,3,4,S5,S6,S7…` while held, then shows `S400`, then
-runs the 8 steps above in order, then returns to the *satsräknare*. Also
-reachable via the PlantCare app (`Test > testcykel`).
+runs the 8 steps above in order, then returns to the *satsräknare* (the cycle
+counter shown on the display in normal operation). Also reachable via the
+PlantCare app (`Test > Test cycle`).
 
 **Two other Test-button hold durations, same button:**
 - **< 5 seconds**: shows the current `PLANT STATUS` S-code (RAM
