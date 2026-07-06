@@ -12,17 +12,7 @@ import ghidra.program.model.address.Address;
 
 public class Dump8051 extends GhidraScript {
     public void run() throws Exception {
-        long[] seeds = {
-            0x0000, // reset vector (LJMP 0x2b)
-            0x002b, // reset target
-            0x00cb, // init
-            0x0256, // timer0 interrupt
-            0x029f, // serial/SPI interrupt
-            0x0156, // nRF905 W_CONFIG writer
-            0x01c8, // RX-payload handler (R_RX_PAYLOAD 0x24, 32-byte loop)
-            0x02fb, // SPI byte transfer (SPI_DATA 0xb2)
-        };
-        for (long s : seeds) {
+        for (long s : Nrf9e5Seeds.ADDRS) {
             try { disassemble(toAddr(s)); } catch (Exception e) {}
         }
         Listing l = currentProgram.getListing();
