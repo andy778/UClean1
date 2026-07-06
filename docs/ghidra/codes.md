@@ -101,8 +101,11 @@ internal label does — not a sign the formula or the phase order is wrong.
 ## 4. "Service device" — RF, no pairing, not IR: two solid leads, no capture yet
 
 User confirms: no IR hardware on the PCB, the technician walked around a
-corner while using it (so it's RF, not line-of-sight), and it talks to
-**any** unit with no pairing step. Two things checked so far:
+corner while using it (so it's RF, not line-of-sight), it talks to **any**
+unit with no pairing step, and — key new detail — it **started a test cycle
+and read status codes out of the unit.** So it is a **bidirectional command
+device**, not just a listener: it sends commands (start test) and receives
+data (status). What's checked so far:
 
 **Lead A — no pairing needed, because there's nothing to pair.** The nRF905
 address `EA EA EA EA` is written as a literal in the 8051 firmware
@@ -116,18 +119,41 @@ begin with. This would need confirming from a second unit's firmware to be
 certain, but it fits every observation so far without inventing a special
 protocol.
 
-**Most useful next step:** an actual RF capture while the service tool is in
-use would settle this empirically and sidestep the static-analysis limit
-entirely - if it rides the same `EAEAEAEA`/868.2 MHz link, `rtl_433` would
-show it directly as extra frames (with `mic=CRC` still matching, since it's
-the same hardware CRC). If you're ever near one when it's used, a capture
-running throughout would be the highest-value data point available right
-now — much more direct than further static tracing.
+**Lead B — the firmware has a radio-triggered command path, it just can't be
+traced to its source statically.** `FUN_ca4e` (`set_active_cycle`) starts a
+test cycle, gated by flag `DAT_013b`. That flag has exactly two assignments in
+the whole 266-function dump and **both are clears** (init + clear-after-use);
+nothing statically sets it nonzero — the same computed/indirect-store pattern
+as the Test-button flags (`0x014a`, `0x0150`, §5). The radio RX validator
+(`FUN_caee`, aka `radio_rx_ack_validator`) exists and processes incoming
+addressed frames. Put together with the field observation that the handheld
+**does** start a test cycle over the air, the conclusion is: a received radio
+command sets `DAT_013b` (and probably `0x014a`/`0x0150`) via a computed store,
+and the main loop (`FUN_c03c`) acts on it. We can see the *effect* and the
+*action* but not the *decode* of the command frame — because it's an indirect
+write and because we've never captured the frame that causes it.
 
-*(An earlier version of this section speculated that `DAT_014a` might be
-this wireless device's trigger flag - that was wrong. `DAT_014a` is the
-styrskåp's own physical **Test button**, confirmed from the manual - see §5.
-Unrelated to the question above.)*
+This also means the panel heartbeat/alarm traffic (`§1`, types `0x20-0x26`) is
+only a **subset** of the radio protocol. There is a **service superset** — at
+least "start test cycle" and "read status codes" — that only the handheld
+exercises, with message types/bodies we have never captured. If the handheld
+can read S-codes / plant status over radio, then that data *is* reachable
+wirelessly (unlike the plain panel link, which never carries it) — relevant if
+the wired serial/modem path is impractical (e.g. outdoors at -30 °C).
+
+**Most useful next step:** an RF capture while the service tool is in use.
+`rtl_433 -R 321 -f 868.2M -Y minmax -F json:svc.json` running throughout would
+show the extra frames directly (same `EAEAEAEA`, same `mic=CRC`). Their `N`
+(byte[10]) and body would reveal the command opcodes and the status-readback
+format — the one piece static analysis structurally cannot recover. Replaying
+those commands (to poll status ourselves) would need a **TX-capable radio**
+(a cheap nRF905 module, or a TX SDR), not just the passive RTL-SDR.
+
+*(An earlier version of this section speculated that `DAT_014a` might be this
+wireless device's trigger flag - partly right in spirit, wrong in specifics.
+`DAT_014a` is the styrskåp's own physical **Test button** 10-14s press,
+confirmed from the manual (§5). The radio-command trigger is the *separate*
+flag `DAT_013b`, above.)*
 
 ## 5. The physical Test button - CONFIRMED from the manual, partially traced in firmware
 
