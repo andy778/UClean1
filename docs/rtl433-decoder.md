@@ -25,41 +25,38 @@ It is **enabled**, CRC-gated, and tested end-to-end against a real capture
 How this was found: [docs/nrf9e5-firmware.md](nrf9e5-firmware.md) (firmware) and
 [docs/radio-capture-log.md](radio-capture-log.md) (captures).
 
-## Payload sub-fields (partially mapped)
+## Payload structure
 
-Reading the MC9S08 frame serializer (`FUN_ce01`) gives an exact byte formula,
-verified against two real CRC-passing packets:
+The full byte map lives in **[docs/ghidra/README.md](ghidra/README.md)** (the
+canonical source, derived from the MC9S08 serializer `FUN_ce01`). In short, the
+32-byte payload is a **messaging protocol**, not telemetry:
 
-| Offset | Field | Meaning |
-| --- | --- | --- |
-| `[0]` | `hdr0` | `record[8]+record[0xb]+12` — a length/sub-type byte |
-| `[3]` | `hdr3` | candidate type/direction marker (`0x40` vs `0x80` seen) |
-| `[4]` | `word_013e_lo` | MC9S08 RAM `0x013e`, low byte only (high byte never sent) |
-| `[5:7]` | `word_0140` | MC9S08 RAM `0x0140`, full 16-bit |
-| `[7]` | `word_0109_lo` | MC9S08 RAM `0x0109`, low byte only |
-| `[8:10]` | `word_010b` | MC9S08 RAM `0x010b`, full 16-bit |
-| `[10:32]` | — | **not mapped** |
+```
+[0]=12+N  [1]=CC  [2]=6E  [3]=flags|dir  [4:10]=two node-IDs  [10]=N  [11..]=body  [..]=stale
+```
 
-These four RAM words behave like a poll/ack correlation cookie, not sensor
-telemetry: each side sends "my `(013e,0140)`" and echoes "your `(0109,010b)`" —
-confirmed live (packet A's `word_013e_lo/word_0140` == packet B's
-`word_0109_lo/word_010b`, and vice versa).
+- **Bytes `[4:10]` are two 3-byte node IDs**, a poll/ack cookie — each side
+  sends "my ID" and echoes "your ID" (`dir` byte `0x40` poll / `0x80` response).
+  Stable per device across captures days apart: outer unit `80 0D 6E`,
+  infopanel `C0 23 4B`.
+- **Byte `[10]` = `N`, the message-body length**; `[11 .. 10+N]` = the body.
+  `N=0` ACK, `N=1` heartbeat (`0x24`), `N=2` alarm (`[type, state]`).
+- **Bytes past `10+N` are stale buffer**, not data — they vary run-to-run for
+  identical logical frames (CRC still passes; U2 CRCs whatever it sends).
 
 **Confirmed absent from the payload:** `CYCLE COUNTER` (RAM `0x0607`) and the
-`PLANT STATUS` source (RAM `0x0613`/`0x0614`) — neither is radio'd out. Get
-those via the serial path instead: [docs/u2-serial-protocol.md](u2-serial-protocol.md).
+`PLANT STATUS` phase (RAM `0x0613`/`0x0614`) — neither is radio'd out (a 20 h
+capture over a real counter tick showed byte-identical heartbeats). The panel
+has no numeric display, so the radio only carries what the panel can *show*: the
+5 alarm symbols + status. Get the counter/phase via the serial path instead:
+[docs/u2-serial-protocol.md](u2-serial-protocol.md).
 
 ## What's still open
 
-- Payload bytes `[10:32)` — traced to a count-loop with computed/indirect
-  addressing in the firmware, not resolved statically.
-- Physical meaning of `word_0140`/`word_010b` and the `hdr3` marker.
-- Resolved by either: more firmware tracing, or a **display-correlated
-  capture** (change the level / force an alarm, diff the payload).
-
-The alarm code table ([eeprom-map.md](eeprom-map.md)) and phase/status S-codes
-([u2-serial-protocol.md](u2-serial-protocol.md)) are the decode targets once a
-byte offset is found for them.
+- Only alarm type `0x20` (status/OK) has been seen on air. The other four
+  (`0x21`–`0x26`) fire in the boot burst — need a capture **started before
+  power-on**, with `-Y minmax`, to record all five and confirm the
+  type→symbol map ([docs/ghidra/codes.md](ghidra/codes.md)) empirically.
 
 ## Build & test
 
