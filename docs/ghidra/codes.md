@@ -97,14 +97,46 @@ Same number, same formula, just the manual's plain-language gloss doesn't
 distinguish "Pre-Aeration" from "Aeration" as sharply as the firmware's
 internal label does — not a sign the formula or the phase order is wrong.
 
-## 4. "Service device" — not found yet, no evidence in the message-building code
+## 4. "Service device" — RF, no pairing, not IR: two solid leads, no capture yet
 
-Every call site that builds a radio message (`FUN_db22`/`FUN_ced9`/`FUN_cf51`,
-grepped across the full [`mc9s08gt32_full.c`](mc9s08gt32_full.c)) only ever
-uses the same 3 body lengths (`N`=0 ack, 1 heartbeat, 2 alarm) and the same 5
-type bytes documented above — no sign of a 6th type or a longer body coming
-from anywhere in U2's own radio-send code. So if there's a separate physical
-service tool, it isn't feeding the 868 MHz link through code we've decompiled
-so far; it would have to be a different interface entirely (the serial `CODE
-RS` port? a BDM connection? something on the front panel?) — worth pinning
-down what the device actually is/does before chasing this further.
+User confirms: no IR hardware on the PCB, the technician walked around a
+corner while using it (so it's RF, not line-of-sight), and it talks to
+**any** unit with no pairing step. Two things checked so far:
+
+**Lead A — no pairing needed, because there's nothing to pair.** The nRF905
+address `EA EA EA EA` is written as a literal in the 8051 firmware
+(`nrf9e5_full.c`, `F_120`/`F_156`) — it is baked into the *image*, not read
+from any per-unit serial number, EEPROM field, or config byte we've found. If
+every Clean 1 unit ships with the same hardcoded address (plausible — nothing
+in either decompile reads a per-unit ID into it), then a service tool that
+also just hardcodes `EAEAEAEA` would trivially "talk to all devices without
+pairing" — because the whole product line never had per-unit addressing to
+begin with. This would need confirming from a second unit's firmware to be
+certain, but it fits every observation so far without inventing a special
+protocol.
+
+**Lead B — `DAT_014a` (the test-cycle trigger) has no code path that sets it.**
+`FUN_92fb` (main loop) reads it twice and, if set, calls `FUN_93f8()`, which
+fires `FUN_e372(1)` (the full alarm-reset/boot burst) and then **clears**
+`DAT_014a` back to 0. A full cross-reference of every static instruction that
+touches address `0x014a` in the entire flash
+(`tools/ghidra/FindRefsInRange.java`, range `0x14a-0x14a`) finds exactly
+**one write — the clear in `FUN_93f8`.** Nothing in the 266 decompiled
+functions ever sets it to a nonzero value via a direct instruction. That
+doesn't mean it's dead code — HCS08 code all over this firmware uses
+*computed* stores (`STA ,X` / `STA ,H:X` with a runtime-computed address, as
+seen in the many `*pbVar = ...` pointer-loop patterns throughout the
+decompile) which Ghidra's static reference search cannot follow back to a
+literal address. So `DAT_014a` is very plausibly set that way, from
+somewhere we haven't isolated yet - but the receive path for whatever sets it
+is not among the RX handling we've already mapped (`FUN_caee`, the info-panel
+poll/ack validator, and `F_3dc`, the 8051's UART/ring-buffer dispatcher -
+neither writes arbitrary MC9S08 RAM addresses).
+
+**Most useful next step:** an actual RF capture while the service tool is in
+use would settle this empirically and sidestep the static-analysis limit
+entirely - if it rides the same `EAEAEAEA`/868.2 MHz link, `rtl_433` would
+show it directly as extra frames (with `mic=CRC` still matching, since it's
+the same hardware CRC). If you're ever near one when it's used, a capture
+running throughout would be the highest-value data point available right
+now — much more direct than further static tracing of computed stores.
