@@ -102,7 +102,9 @@ one fault (see [u2-serial-protocol.md](u2-serial-protocol.md), `ALARM STATUS`):
 
 So `MV1–MV5` are the five solenoid valves — **dosing, sludge-return, pump-out,
 pump-in, aeration** — which the phase list drives. (`E401`–`E403` are the 1/3/6-year
-service reminders; `E000` = no fault.)
+service reminders; `E000` = no fault.) **Confirmed by silkscreen**: the output
+row's own screw terminals are labelled `MV1 Compressor`, `MV2`–`MV5`, `Spare`
+([README](../README.md)) — matching this EEPROM-derived naming exactly.
 
 ### `0x04D0–0x05BF` — actuator event / timing table
 
