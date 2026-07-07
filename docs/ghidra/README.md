@@ -85,10 +85,13 @@ types from one reboot capture (pull external unit power ~10 s, plug back in):
 | poll | `0x0d` | 1 | `24` | heartbeat opcode |
 | **alarm** | `0x0e` | 2 | `20 00` | `[type=0x20 status, state=0 OK]` |
 
-Alarm body = `[type, state]`; `state` 0/1 = clear/active. Only type `0x20`
-(status / green LED idle) has been captured so far — the other four
-(`0x21`/`0x22`/`0x23`/`0x26`) need a capture **started before power-on** to catch
-the boot burst. See [`alarm_frames.c`](alarm_frames.c).
+Alarm body = `[type, state]`; `state` 0/1 = clear/active. **Boot-burst capture
+(2026-07-06) confirmed 4 of the 5 types on air**, all `state=0` (matching the
+panel's green-LED/all-clear idle): `0x20` status, `0x21` chemical_low, `0x22`
+high_water, `0x23` sludge_reminder — bodies `[type, 00]`, exactly as predicted.
+The 5th (`0x26` device_fault) was dropped in that fast burst but is
+firmware-confirmed (`FUN_e372`); re-run the boot capture to catch it. See
+[`alarm_frames.c`](alarm_frames.c) and [`../radio-capture-log.md`](../radio-capture-log.md).
 
 **Bytes `11+N … 31` are stale buffer, not data.** U2 fills only `N` body bytes
 and radios the leftover buffer, so identical logical frames print different
@@ -114,15 +117,14 @@ Seed `0xFFFF` (`FUN_e088`), poly `0x1021`, no reflection, xorout 0, over
 
 Codes → display E-codes are decoded in [`../eeprom-map.md`](../eeprom-map.md).
 
-## Open item for the next capture
+## Status: alarm model confirmed on air
 
-The `[type, state]` offset is now pinned (type = `payload[11]`, state =
-`payload[12]`), and the rtl_433 decoder emits `msg_len`/`msg_type`/`msg_name`/
-`msg_state`. Only the `0x20` (status) type has been seen on air so far.
-
-Alarm messages are **edge-driven** (`FUN_e0e5`) or fire in the boot burst
-(`FUN_e372`), so a capture started *after* boot shows only the heartbeat frames
-plus the repeating status. To catch all five types (`0x20`/`0x21`/`0x22`/`0x23`/
-`0x26`), **start `rtl_433` first, then power the unit on** — that confirms the
-`msg_name` mapping for the remaining four symbols (chemical_low / high_water /
-sludge_reminder / device_fault). See [`../rtl433-decoder.md`](../rtl433-decoder.md).
+The `[type, state]` offset is pinned (type = `payload[11]`, state =
+`payload[12]`), the rtl_433 decoder emits `msg_len`/`msg_type`/`msg_name`/
+`msg_state`, and a boot-burst capture (2026-07-06, `rtl_433 ... -Y minmax`,
+power pulled ~10 s) recorded 4 of the 5 types live — `0x20`/`0x21`/`0x22`/`0x23`
+all `state=0`, `msg_name` mapping matching the table above exactly. Only `0x26`
+(device_fault) was dropped in that burst (packet loss); one more boot capture
+catches it. Alarm messages are **edge-driven** (`FUN_e0e5`) or fire in the boot
+burst (`FUN_e372`), so a capture started *after* boot shows only heartbeats plus
+the repeating status — start `rtl_433` first, then power on, to see the burst.

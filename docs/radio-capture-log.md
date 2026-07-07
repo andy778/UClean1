@@ -41,6 +41,25 @@ FM-discriminate (`np.angle(iq[1:] * np.conj(iq[:-1]))`), find bursts by
 magnitude, resample at ~10.0 samples/chip (scan start phase + rate), hard-slice
 on sign, Manchester-decode both bit-parities, search for `EA EA EA EA`.
 
+## Boot-burst capture — the 5 alarm types (2026-07-06)
+
+`rtl_433 -R 321 -f 868.2M -Y minmax -F json:boot.json`, then pull the outer
+unit's power ~10 s and plug back in. Right after the link re-establishes,
+`FUN_e372` blasts the panel's 5 alarm states. Captured 4 of the 5 (one dropped
+in the fast burst), all `state=0` — matching the panel's green-LED/all-clear
+idle:
+
+| Frame body `[type state]` | `msg_name` | payload |
+| --- | --- | --- |
+| `20 00` | status | `0ecc6e4f800d6ec0234b0220006566bd…` |
+| `21 00` | chemical_low | `0ecc6e4f800d6ec0234b0221005657bd…` |
+| `22 00` | high_water | `0ecc6e4f800d6ec0234b0222000304bd…` |
+| `23 00` | sludge_reminder | `0ecc6e4f800d6ec0234b0223003035bd…` |
+
+Confirms the type→symbol map empirically. The bytes right after the 2-byte body
+differ every frame (`6566`/`5657`/`0304`/`3035`) — the stale-buffer tail, as
+expected. `0x26` (device_fault) wasn't caught this run; repeat to get it.
+
 ## What idle captures showed (before the frame model was confirmed)
 
 A 1.5 h idle log (730 frames) found:
