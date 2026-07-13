@@ -1,12 +1,72 @@
-# M24128 (U3) EEPROM memory map
+# M24128 (U3) EEPROM — reading it and its memory map
 
-Derived from a full 16 KB dump ([`dumps/u3-m24128-eeprom.bin`](../dumps/u3-m24128-eeprom.bin),
-16384 bytes) — see [docs/u3-eeprom.md](u3-eeprom.md) for how it was read.
+U3 is an [M24128](https://www.st.com/en/memories/m24128-bw.html) 128-Kbit
+(16 KB) serial EEPROM on the Clean 1 PCB, marked `4128BWP 8424K`, on I2C bus
+address **`0x50`**. Derived from a full 16 KB dump
+([`dumps/u3-m24128-eeprom.bin`](../dumps/u3-m24128-eeprom.bin), 16384 bytes).
 
 > **Provenance:** this dump is from **board A** (the retired original, OC13
 > output-driver fault), not the live unit — see the two-boards note in the
-> [README](../README.md). So the config below (`PASS`, phone slots) is board A's,
-> and the display counter on the live board B is **not** in this dump.
+> [README](../README.md). So the config below (`PASS`, phone slots) is board
+> A's, and the display counter on the live board B is **not** in this dump.
+
+## Reading it
+
+The M24128 is an 8-pin device (SO8/DIP8): E0/E1/E2 (address bits, pins 1–3),
+VSS (4), SDA (5), SCL (6), WC (7, write control), VCC (8). Because the chip
+answers at `0x50`, E0/E1/E2 are tied low — grounded **by the PCB** — so they
+need no wiring from the Pi.
+
+**What was actually connected:** four wires, top-left corner of the Pi's
+40-pin header (I2C **bus 1**, pin 1 is the square pad):
+
+| Pi header pin | Pi function  | → M24128 pin |
+| ---           | ---          | ---          |
+| **pin 1**     | 3V3          | 8  VCC       |
+| **pin 3**     | GPIO2 / SDA1 | 5  SDA       |
+| **pin 5**     | GPIO3 / SCL1 | 6  SCL       |
+| **pin 6**     | GND          | 4  VSS       |
+
+Full interactive reference: [pinout.xyz/pinout/i2c](https://pinout.xyz/pinout/i2c).
+Reading a **desoldered** chip on a breadboard instead, wire E0/E1/E2 → GND
+(for address `0x50`) and WC → GND or VCC yourself.
+
+Notes:
+- Bus 1's on-board ~1.8 kΩ pull-ups mean external pull-ups are usually unnecessary.
+- Use **3V3, never 5V** — the Pi's GPIO is not 5V-tolerant.
+- Enable I2C first: `sudo raspi-config` → Interface Options → I2C, then reboot.
+
+**Bus contention:** reading in-circuit while the board is powered means the
+MC9S08 (U2) is also an I2C master on the same bus, and early attempts showed
+inconsistent results because of it. Either hold the CPU in reset while
+reading, power the EEPROM alone with the rest of the board off, or desolder
+U3 as a last resort.
+
+Confirm the chip answers before dumping:
+
+```
+i2cdetect -y 1
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+50: 50 -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+```
+
+`i2cdump` alone isn't enough: it only reaches offset `0x00–0xFF` with a single
+address byte, but the M24128 needs a **14-bit (2-byte) address**, and the
+firmware's live records sit near `0x3A00–0x3FFF`, well outside that reach. Use
+the helper instead, which does correct 2-byte addressing:
+
+```bash
+tools/dump_eeprom.sh 1 dumps/u3-m24128-eeprom.bin
+```
+
+It prefers the kernel `at24` driver (clean binary) and falls back to chunked
+`i2ctransfer`. Spot-check one known record:
+
+```bash
+i2ctransfer -y 1 w2@0x50 0x3a 0x9d r5     # 5 bytes at 0x3A9D
+```
+
+Deliverable: `dumps/u3-m24128-eeprom.bin`, exactly **16384 bytes**.
 
 ## Summary
 
