@@ -79,7 +79,7 @@ advances when it completes. So the radio gives a "treating" event, not the
 numeric counter — get that from the serial path
 ([u2-serial-protocol.md](u2-serial-protocol.md)).
 
-## Analyzing in Universal Radio Hacker (URH), if starting from scratch
+## Manual analysis, if starting from scratch
 
 1. Set sample rate to match the capture, demodulate as FSK.
 2. Read bit rate off the eye diagram.
@@ -89,4 +89,4 @@ numeric counter — get that from the serial path
 6. Capture while reading the unit's display, to map payload bytes to fields.
 
 All of 1–5 above are now answered from firmware (see rtl433-decoder.md) — this
-manual URH pass is only needed if the firmware-derived values are ever in doubt.
+manual pass is only needed if the firmware-derived values are ever in doubt.
