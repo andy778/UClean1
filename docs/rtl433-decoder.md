@@ -54,10 +54,12 @@ variation was a ~55 min burst matching a treatment batch running.
 `F_156` ([`docs/ghidra/nrf9e5_full.c#L393-L410`](ghidra/nrf9e5_full.c#L393-L410))
 writes the nRF905 config register directly: opcode `W_RF_CONFIG` (`0x00`)
 followed by 10 bytes (`CR0`–`CR9`), then a separate `W_TX_ADDRESS` (`0x22`)
-write. Decoded against the config-register layout in
-[register-map.md](ghidra/register-map.md) — this is every field in the table
-above, straight from the write that configures the radio, not inferred from
-captures:
+write of the same 4 bytes — one address, written twice (`RX_ADDRESS` in the
+config register, then `TX_ADDRESS` via its own opcode) since the chip uses it
+both to match incoming frames and to prefix outgoing ones. Decoded against the
+config-register layout in [register-map.md](ghidra/register-map.md) — this is
+every field in the table above, straight from the write that configures the
+radio, not inferred from captures:
 
 | Byte | On the wire | Field(s) | Decoded |
 | --- | --- | --- | --- |
@@ -66,11 +68,8 @@ captures:
 | `CR2` | `0x44` | `RX_AFW`=4, `TX_AFW`=4 | address width 4 bytes, both directions |
 | `CR3` | `0x20` | `RX_PW[5:0]` | RX payload width = 32 |
 | `CR4` | `0x20` | `TX_PW[5:0]` | TX payload width = 32 |
-| `CR5–8` | `EA EA EA EA` | `RX_ADDRESS` | matches the on-air address exactly |
-| `CR9` | `0xD4` | `UP_CLK_FREQ`=`00`, `UP_CLK_EN`=1, `XOF`=`010`, `CRC_MODE`=1, `CRC_EN`=1 | CRC-16 enabled, 16 MHz crystal |
-
-`W_TX_ADDRESS` (opcode `0x22`, L406–410) repeats `EA EA EA EA` for the TX side
-— RX and TX addresses match.
+| `CR5–8` + `W_TX_ADDRESS` | `EA EA EA EA` (both) | `RX_ADDRESS` / `TX_ADDRESS` | same 4 bytes set for RX match and TX prefix — matches the on-air address exactly |
+| `CR9` | `0xD4` | `UP_CLK_FREQ`=`00`, `UP_CLK_EN`=1, `XOF`=`010`, `CRC_MODE`=1, `CRC_EN`=1 | `CRC_MODE`/`CRC_EN` = the CRC-16 already in the table above; `XOF`=`010` = 16 MHz crystal |
 
 ## Payload structure
 
