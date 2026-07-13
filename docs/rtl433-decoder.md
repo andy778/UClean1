@@ -59,6 +59,10 @@ has no numeric display, so the radio only carries what the panel can *show*: the
 
 ## Build & test
 
+The decoder lives on the `add-uponor-clean1` branch of
+[andy778/rtl_433](https://github.com/andy778/rtl_433), a fork of upstream
+[merbanan/rtl_433](https://github.com/merbanan/rtl_433) — not yet upstreamed.
+
 ```bash
 git clone https://github.com/andy778/rtl_433 && cd rtl_433
 git checkout add-uponor-clean1
