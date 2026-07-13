@@ -138,4 +138,4 @@ The firmware reads/writes records near the **top** of the M24128 — e.g. `0x3A9
 (5-byte record), `0x3AD5` (2-byte), plus stride-8 indexed record arrays. The
 README `i2cdump` only captured page 0 (`0x00–0xFF`) with single-byte
 addressing, so it **misses the active region around `0x3A00–0x3FFF`**. See
-[docs/u3-eeprom.md](u3-eeprom.md) for the correct full 16 KB dump procedure.
+[docs/eeprom-map.md](eeprom-map.md) for the correct full 16 KB dump procedure.

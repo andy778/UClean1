@@ -104,7 +104,7 @@ header from [docs/u2-serial-protocol.md](docs/u2-serial-protocol.md).
 U3 is an M24128 EEPROM on the I2C bus at address `0x50`, read with a Raspberry Pi
 and i2c-tools. Wiring the Pi to the chip, reading the full 16 KB (the `i2cdump`
 above only reaches the first 256 bytes), and the dump analysis now live on their
-own page: **[docs/u3-eeprom.md](docs/u3-eeprom.md)**.
+own page: **[docs/eeprom-map.md](docs/eeprom-map.md)**.
 
 ## Flash content
 To read out the flash content from the CPU using reader like [USBDM](https://sourceforge.net/projects/usbdm/files/) will get you and srecord [dumps/u2-mc9s08gt-flash.s19](dumps/u2-mc9s08gt-flash.s19) file. 
