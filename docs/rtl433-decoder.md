@@ -8,6 +8,29 @@ Decoder lives in the fork, not this repo:
 It is **enabled**, CRC-gated, and tested end-to-end against a real capture
 (zero false positives on an unrelated 433 MHz capture).
 
+## Capture
+
+```bash
+rtl_sdr -f 868.20M -s 1024000 -g 49 -n $((1024000*300)) capture.cu8
+```
+
+- Tune 150 kHz low (868.20M, not 868.35M) — the real carrier clears the
+  RTL-SDR's DC self-mixing spike; centered on it, rtl_433 sees nothing.
+- `-g 49`: high gain, low gain sits near the noise floor.
+- Cadence: one event every ~62 s, a two-packet exchange (poll + response).
+- Boot burst (all 5 alarm types): `rtl_433 -R 321 -f 868.2M -Y minmax -F json:boot.json`,
+  then power-cycle the outer unit. `FUN_e372` blasts all states on reconnect.
+
+Flex decoder, before the C decoder existed:
+
+```bash
+rtl_433 -f 868.20M -Y minmax -X 'n=uclean1,m=FSK_MC_ZEROBIT,s=10,r=100,bits>=200,invert'
+```
+
+`m=FSK_MC_ZEROBIT` decodes Manchester at the demodulator level (the `decode_mc`
+post-filter fails — phase-offset, noisy packets). `-Y minmax` is required or
+the weaker far-unit packet fragments. `invert` matches raw `01`→1 / `10`→0.
+
 ## Frame format (confirmed)
 
 ```
@@ -22,8 +45,9 @@ It is **enabled**, CRC-gated, and tested end-to-end against a real capture
 | Payload | 32 bytes | firmware `RX_PW`/`TX_PW` |
 | CRC | CRC-16, poly `0x1021`, init `0xFFFF`, over address+payload | firmware `CRC_MODE`; **verified live** by `tools/rtl433/probe_capture.py` and in the decoder |
 
-How this was found: [docs/nrf9e5-firmware.md](nrf9e5-firmware.md) (firmware) and
-[docs/radio-capture-log.md](radio-capture-log.md) (captures).
+Confirmed by a ~20 h log spanning a real counter tick: both heartbeat frames
+stayed byte-identical the whole span — the counter is never on air. The only
+variation was a ~55 min burst matching a treatment batch running.
 
 ## Payload structure
 
@@ -45,8 +69,7 @@ canonical source, derived from the MC9S08 serializer `FUN_ce01`). In short, the
   identical logical frames (CRC still passes; U2 CRCs whatever it sends).
 
 **Confirmed absent from the payload:** `CYCLE COUNTER` (RAM `0x0607`) and the
-`PLANT STATUS` phase (RAM `0x0613`/`0x0614`) — neither is radio'd out (a 20 h
-capture over a real counter tick showed byte-identical heartbeats). The panel
+`PLANT STATUS` phase (RAM `0x0613`/`0x0614`) — neither is radio'd out. The panel
 has no numeric display, so the radio only carries what the panel can *show*: the
 5 alarm symbols + status. Get the counter/phase via the serial path instead:
 [docs/u2-serial-protocol.md](u2-serial-protocol.md).
