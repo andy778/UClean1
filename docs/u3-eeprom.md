@@ -12,26 +12,16 @@ what we have found so far.
 
 ## Wiring the Raspberry Pi to U3
 
-The M24128 is an 8-pin device (SO8/DIP8). Standard pinout:
+The M24128 is an 8-pin device (SO8/DIP8): E0/E1/E2 (address bits, pins 1–3),
+VSS (4), SDA (5), SCL (6), WC (7, write control), VCC (8). Because the chip
+answers at `0x50`, the three address pins **E0/E1/E2 are all tied low** (I2C
+device-type code `1010` + `E2 E1 E0 = 000` = `0x50`) — and on this board they
+are grounded **by the PCB**, so they need no wiring from the Pi.
 
-| Pin | Name      | Function                         |
-| --- | ---       | ---                              |
-| 1   | E0        | Chip-address bit 0               |
-| 2   | E1        | Chip-address bit 1               |
-| 3   | E2        | Chip-address bit 2               |
-| 4   | VSS       | Ground                           |
-| 5   | SDA       | I2C data                         |
-| 6   | SCL       | I2C clock                        |
-| 7   | WC        | Write control (low = writable)   |
-| 8   | VCC       | +1.8 … 5.5 V supply              |
-
-Because the chip answers at `0x50`, the three address pins **E0/E1/E2 are all
-tied low** (the I2C device-type code `1010` + `E2 E1 E0 = 000` = `0x50`) — and on
-this board they are grounded **by the PCB**, so they need no wiring from the Pi.
-
-**What was actually connected for this dump:** just **four** wires, all on the
-Pi's 40-pin header (I2C **bus 1**) — because the chip was read **in-circuit**, the
-board itself provides E0/E1/E2 (→ `0x50`) and WC:
+**What was actually connected for this dump:** just **four** wires, all in the
+**top-left corner** of the Pi's 40-pin header (I2C **bus 1**, pin 1 is the
+square pad) — because the chip was read **in-circuit**, the board itself
+provides E0/E1/E2 (→ `0x50`) and WC:
 
 | Pi header pin | Pi function  | → M24128 pin |
 | ---           | ---          | ---          |
@@ -39,16 +29,6 @@ board itself provides E0/E1/E2 (→ `0x50`) and WC:
 | **pin 3**     | GPIO2 / SDA1 | 5  SDA       |
 | **pin 5**     | GPIO3 / SCL1 | 6  SCL       |
 | **pin 6**     | GND          | 4  VSS       |
-
-All four sit in the **top-left corner** of the 40-pin header (odd pins in the
-left column, even in the right; pin 1 is the square pad):
-
-```
-    3V3  ──▶ [ 1] [ 2]     5V
-GPIO2/SDA ──▶ [ 3] [ 4]     5V
-GPIO3/SCL ──▶ [ 5] [ 6] ◀── GND
-              [ 7] [ 8]
-```
 
 Full interactive reference: **[pinout.xyz/pinout/i2c](https://pinout.xyz/pinout/i2c)**.
 
