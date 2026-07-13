@@ -91,7 +91,7 @@ panel's green-LED/all-clear idle): `0x20` status, `0x21` chemical_low, `0x22`
 high_water, `0x23` sludge_reminder — bodies `[type, 00]`, exactly as predicted.
 The 5th (`0x26` device_fault) was dropped in that fast burst but is
 firmware-confirmed (`FUN_e372`); re-run the boot capture to catch it. See
-[`alarm_frames.c`](alarm_frames.c) and [`../radio-capture-log.md`](../radio-capture-log.md).
+[`alarm_frames.c`](alarm_frames.c) and [`../rtl433-decoder.md`](../rtl433-decoder.md).
 
 **Bytes `11+N … 31` are stale buffer, not data.** U2 fills only `N` body bytes
 and radios the leftover buffer, so identical logical frames print different

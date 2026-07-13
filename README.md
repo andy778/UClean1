@@ -152,4 +152,4 @@ The U2 CPU flash (`dumps/u2-mc9s08gt-flash.s19`) was disassembled in [Ghidra](ht
 U1's radio firmware (8051, on-air Manchester/frame/nRF905 config) has **no external boot chip** — it's embedded in the U2 flash we already dumped, and has been extracted + disassembled. See **[docs/nrf9e5-firmware.md](docs/nrf9e5-firmware.md)**.
 
 ## Radio decoding (rtl_433)
-The 868 MHz frame (address, 32-byte payload, CRC-16) is confirmed and the decoder is **enabled and CRC-gated** in the fork: [andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c). Spec, byte mapping, and what's still open: **[docs/rtl433-decoder.md](docs/rtl433-decoder.md)**; capture recipes and history: **[docs/radio-capture-log.md](docs/radio-capture-log.md)**.
+The 868 MHz frame (address, 32-byte payload, CRC-16) is confirmed and the decoder is **enabled and CRC-gated** in the fork: [andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c). Spec, byte mapping, capture recipes, and what's still open: **[docs/rtl433-decoder.md](docs/rtl433-decoder.md)**.
