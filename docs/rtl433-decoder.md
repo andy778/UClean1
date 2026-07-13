@@ -39,15 +39,38 @@ the weaker far-unit packet fragments. `invert` matches raw `01`→1 / `10`→0.
 
 | Param | Value | Source |
 | --- | --- | --- |
-| Carrier | 868.2 MHz (channel 117) | firmware `W_CONFIG`, matches measured carrier |
+| Carrier | 868.2 MHz (channel 117) | firmware `W_RF_CONFIG` byte `CR1` (below), matches measured carrier |
 | Line rate | 100 kbps, Manchester-coded on air | capture (neither firmware does Manchester in software — it's a PHY effect) |
-| Address | `EA EA EA EA`, 4 bytes | firmware `W_CONFIG` / `W_TX_ADDRESS`; confirmed on-air |
-| Payload | 32 bytes | firmware `RX_PW`/`TX_PW` |
-| CRC | CRC-16, poly `0x1021`, init `0xFFFF`, over address+payload | firmware `CRC_MODE`; **verified live** by `tools/rtl433/probe_capture.py` and in the decoder |
+| Address | `EA EA EA EA`, 4 bytes | firmware `W_RF_CONFIG` bytes `CR2`/`CR5-8` + `W_TX_ADDRESS`; confirmed on-air |
+| Payload | 32 bytes | firmware `W_RF_CONFIG` bytes `CR3`/`CR4` (`RX_PW`/`TX_PW`) |
+| CRC | CRC-16, poly `0x1021`, init `0xFFFF`, over address+payload | firmware `W_RF_CONFIG` byte `CR9` (`CRC_MODE`/`CRC_EN`); **verified live** by `tools/rtl433/probe_capture.py` and in the decoder |
 
 Confirmed by a ~20 h log spanning a real counter tick: both heartbeat frames
 stayed byte-identical the whole span — the counter is never on air. The only
 variation was a ~55 min burst matching a treatment batch running.
+
+### Config bytes decoded (`F_156`, `radio_config_resend`)
+
+`F_156` ([`docs/ghidra/nrf9e5_full.c#L393-L410`](ghidra/nrf9e5_full.c#L393-L410))
+writes the nRF905 config register directly: opcode `W_RF_CONFIG` (`0x00`)
+followed by 10 bytes (`CR0`–`CR9`), then a separate `W_TX_ADDRESS` (`0x22`)
+write. Decoded against the config-register layout in
+[register-map.md](ghidra/register-map.md) — this is every field in the table
+above, straight from the write that configures the radio, not inferred from
+captures:
+
+| Byte | On the wire | Field(s) | Decoded |
+| --- | --- | --- | --- |
+| `CR0` | `0x75` | `CH_NO[7:0]` | channel low byte |
+| `CR1` | `0x06` | `CH_NO[8]`=0, `HFREQ_PLL`=1, `PA_PWR`=`01`, `RX_RED_PWR`=0, `AUTO_RETRAN`=0 | 9-bit channel = `0x075` = 117; `fRF = (422.4 + 117/10) × 2 = 868.2 MHz` — matches the measured carrier exactly. `PA_PWR=01` = −2 dBm output |
+| `CR2` | `0x44` | `RX_AFW`=4, `TX_AFW`=4 | address width 4 bytes, both directions |
+| `CR3` | `0x20` | `RX_PW[5:0]` | RX payload width = 32 |
+| `CR4` | `0x20` | `TX_PW[5:0]` | TX payload width = 32 |
+| `CR5–8` | `EA EA EA EA` | `RX_ADDRESS` | matches the on-air address exactly |
+| `CR9` | `0xD4` | `UP_CLK_FREQ`=`00`, `UP_CLK_EN`=1, `XOF`=`010`, `CRC_MODE`=1, `CRC_EN`=1 | CRC-16 enabled, 16 MHz crystal |
+
+`W_TX_ADDRESS` (opcode `0x22`, L406–410) repeats `EA EA EA EA` for the TX side
+— RX and TX addresses match.
 
 ## Payload structure
 
