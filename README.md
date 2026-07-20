@@ -113,7 +113,14 @@ terminal): the board has exactly **4 sensor inputs**, left to right:
 "High water?" uncertainty in [docs/eeprom-map.md](docs/eeprom-map.md) — it's
 the confirmed silkscreen name, not a guess — and shows the chemical/flocculant
 side uses a **pressure** sensor, not a level float. `Spare` here is a second
-genuine unused channel (distinct from the output row's `Spare`).
+genuine unused channel (distinct from the output row's `Spare`). Two 14-pin
+SOICs (`U4`/`U5`, part numbers not legible in the photo) sit directly behind
+the header, likely conditioning the 4 raw signals before U2 reads them.
+**Firmware-traced** for the `High water` channel specifically
+([docs/eeprom-map.md](docs/eeprom-map.md#how-the-firmware-handles-the-4-sensor-inputs--traced-from-fun_c03c)):
+sensor → mux → `FUN_a0da` poll → `FUN_c03c` debounce → alarm code `0x1F`,
+exactly EEPROM `E031` "High water; tank". The other 3 channels don't have an
+equivalent traced handler yet.
 
 ## I2C Memory (U3, 128-Kbit / 16 KB)
 U3 is an M24128 EEPROM on the I2C bus at address `0x50`, read with a Raspberry Pi
