@@ -85,9 +85,16 @@ output row's screw terminals are labelled, left to right, `MV1 Compressor`,
 `MV2`, `MV3`, `MV4`, `MV5`, `Spare`, `Alarm` — matching
 [docs/eeprom-map.md](docs/eeprom-map.md)'s EEPROM-derived fault table exactly
 (`E040` compressor, `E041`–`E045` = MV1–MV5) and confirming `Spare` as a genuine
-unused 7th channel, not a numbering gap. `Alarm` is a separate 2-pin terminal
-(not part of the output row) — likely a dry-contact/relay output for an
-external alarm siren or building-management input, not yet traced in firmware.
+unused 7th channel, not a numbering gap. **Firmware-confirmed** (`FUN_a138`/
+`FUN_c9e1`, [docs/eeprom-map.md](docs/eeprom-map.md#how-the-firmware-addresses-the-7-output-channels--traced-from-fun_a138)):
+`MV1 Compressor` is actually **two separate adjacent channels** (Compressor =
+index 0, MV1 = index 1) that just read as one combined label on the
+silkscreen — the self-test loop addresses all 7 channels through one shared
+`PTBD` mux bus, not individual GPIOs, and its per-channel fault codes
+(`channel_index + 0x28`) match `E040`–`E045` exactly. `Alarm` is a separate
+2-pin terminal (not part of the output row) — likely a dry-contact/relay
+output for an external alarm siren or building-management input, not yet
+traced in firmware.
 
 Same photo also shows, near U2: a 3-digit 7-segment display, a physical
 push-button silkscreened **`Test`**, and a separate 4-pin header silkscreened

@@ -76,7 +76,10 @@ this repo: `SCI1C2`/`SCI2C2` (UART enable/TE/RE — modem + debug ports,
 [docs/nrf9e5-firmware.md](../nrf9e5-firmware.md)), `IIC1*` (I2C — the M24128
 EEPROM, [docs/eeprom-map.md](../eeprom-map.md)), `TPM1*` (timer/PWM — actuator
 timing), `PTxD`/`PTxDD` (GPIO — output driver channels, see the README's
-D6–D12/OC1–OC14 mapping).
+D6–D12/OC1–OC14 mapping). **`PTBD` specifically is a multiplexed address bus,
+not one pin per channel** — `FUN_a138` addresses all 7 output-driver channels
+through it via a lookup table (`DAT_80b3` = `channel_index * 2`), traced in
+full in [`../eeprom-map.md`](../eeprom-map.md#how-the-firmware-addresses-the-7-output-channels--traced-from-fun_a138).
 
 ## Open items (for the next pass)
 

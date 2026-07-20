@@ -1871,6 +1871,10 @@ undefined2 FUN_a086(short param_1,byte *param_2,byte *param_3)
 
 
 ########## FUN_a0da @ a0da  size=71 ##########
+// aka: mux_read_sensor_channels — reads back mux channels 0-3 (input side) via
+// the same PTBD address bus as FUN_a138, into DAT_05f6. Guarded by DAT_05f8 so
+// it never runs while the output self-test (FUN_a138) is driving the bus.
+// Scheduled periodically by FUN_a121 via FUN_8fc4 (background task).
 
 void FUN_a0da(void)
 
@@ -1908,6 +1912,8 @@ void FUN_a0da(void)
 
 
 ########## FUN_a121 @ a121  size=23 ##########
+// aka: init_sensor_poll_task — runs the mux sensor read once, then registers
+// it as a recurring background task.
 
 void FUN_a121(void)
 
@@ -1920,6 +1926,14 @@ void FUN_a121(void)
 
 
 ########## FUN_a138 @ a138  size=136 ##########
+// aka: actuator_self_test — walks all 7 output-driver channels (Compressor,
+// MV1-5, Spare) via the PTBD mux address bus (DAT_80b3[i] = i*2, plus a 0x10
+// strobe/enable bit), samples the readback bit (PTBD&1) up to 30 times, and
+// flags a channel as failed if that bit never clears. Returns a 7-bit
+// pass/fail mask, bit i = channel i (0=Compressor .. 5=MV5, 6=Spare, untested
+// downstream - see FUN_c9e1). Confirms the "seven identical output-driver
+// channels" (README.md) are multiplexed off one shared address bus, not
+// individually wired GPIOs.
 
 byte FUN_a138(void)
 
@@ -5188,6 +5202,14 @@ void FUN_c9b2(char param_1)
 
 
 ########## FUN_c9e1 @ c9e1  size=109 ##########
+// aka: actuator_self_test_and_report — runs FUN_a138, then for bits 0-5 of its
+// result (channel 6/Spare excluded) turns a failing bit into alarm code
+// (channel_index + 0x28), which is exactly E040 (Compressor) .. E045 (MV5).
+// Confirms the FUN_a138 channel order: 0=Compressor, 1=MV1 (dosing),
+// 2=MV2 (sludge-return), 3=MV3 (pump-out), 4=MV4 (pump-in), 5=MV5 (aeration),
+// 6=Spare. Writes the code into the per-channel status array at
+// 0x0717 + i*8 (same array referenced for the radio device_fault message,
+// see README.md) and calls FUN_b6cd(i+4) (not yet traced) on failure.
 
 void FUN_c9e1(undefined1 param_1)
 
