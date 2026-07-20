@@ -205,6 +205,57 @@ service reminders; `E000` = no fault.) **Confirmed by silkscreen**: the output
 row's own screw terminals are labelled `MV1 Compressor`, `MV2`–`MV5`, `Spare`
 ([README](../README.md)) — matching this EEPROM-derived naming exactly.
 
+### How the firmware addresses the 7 output channels — traced from `FUN_a138`
+
+The "seven identical output-driver channels" (README) are not individually
+wired GPIOs — they're **multiplexed off one shared address bus on `PTBD`**.
+`FUN_a138` (`actuator_self_test`, [`ghidra/mc9s08gt32_full.c`](ghidra/mc9s08gt32_full.c))
+walks all 7 channels using a lookup table at flash `0x80B3`:
+
+```
+DAT_80b3 = 00 02 04 06 08 0a 0c   (channel_index * 2)
+```
+
+For each channel it writes `PTBD = DAT_80b3[i] | 0x10 | (PTBD & 0xc0)` (address +
+strobe bit), waits, then samples a readback bit (`PTBD & 1`) up to 30 times — a
+channel that never clears that bit is flagged failed. The 7-bit pass/fail
+result is consumed by `FUN_c9e1` (`actuator_self_test_and_report`), which turns
+a failing bit `i` (0–5 only; bit 6/Spare is excluded) directly into an alarm
+code:
+
+```
+alarm_code = channel_index + 0x28
+```
+
+...which is exactly the `E040`–`E045` sequence above. This **confirms the
+firmware's channel order matches the silkscreen order 1:1**, and resolves the
+"`MV1 Compressor`" combined-looking silkscreen label: they're genuinely two
+separate adjacent channels (index 0 and 1), not one terminal.
+
+| Channel index | Mux code | Alarm code | Function |
+| --- | --- | --- | --- |
+| 0 | `0x00` | `E040` (`0x28`) | Compressor |
+| 1 | `0x02` | `E041` (`0x29`) | MV1 — chemical-dosing valve |
+| 2 | `0x04` | `E042` (`0x2A`) | MV2 — sludge-return valve |
+| 3 | `0x06` | `E043` (`0x2B`) | MV3 — pump-out valve |
+| 4 | `0x08` | `E044` (`0x2C`) | MV4 — pump-in valve |
+| 5 | `0x0a` | `E045` (`0x2D`) | MV5 — aeration valve |
+| 6 | `0x0c` | *(not checked)* | Spare — confirms it's genuinely untested/unused |
+
+Each fault also writes into a per-channel status array at `0x0717 + i*8`
+(`0x717, 0x71F, 0x727, 0x72F, 0x737, 0x73F`) — the same array the radio
+`device_fault` message (`0x26`) draws from
+([ghidra/README.md](ghidra/README.md)). `FUN_a0da`
+(`mux_read_sensor_channels`) reads the same `PTBD` bus for channels 0–3
+(likely the analog/level sensor side of the mux, not yet identified further)
+on a periodic background task, mutually exclusive with the self-test via
+`DAT_05f8`.
+
+**Still open:** exactly when `FUN_c9e1(2)` (the self-test entry point) fires —
+it's called from a phase-transition branch of the main state machine, not yet
+pinned to "every boot" vs. "every cycle start" — and `FUN_b6cd` (called on a
+failing channel, presumably the alarm-broadcast trigger) hasn't been traced.
+
 ### `0x04D0–0x05BF` — actuator event / timing table
 
 Named on/off events with big-endian `u16` timing parameters (e.g. `0x03E7` =
