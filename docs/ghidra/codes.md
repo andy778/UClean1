@@ -74,7 +74,7 @@ check, done by reading the dump directly):
 ```
 offset  idx  label                  offset  idx  label
 0x004c  (1)  Cleaning cycle         0x027c  (1)  Waiting I    [cycle 3]
-0x0063   01  1 High water?          0x0289  0b   3 High water?
+0x0063   01  1 High water           0x0289  0b   3 High water
 0x007d   02  1 Pre-Aeration         0x029c   03  3 Aeration
 0x0097   03  1 Aeration             0x02aa   04  3 Pump-in
 0x00ac   04  1 Chemical filling     0x02bb   05  3 Waiting II
@@ -84,13 +84,16 @@ offset  idx  label                  offset  idx  label
 0x0111   08  1 Sludge removal
 0x012c   09  1 Sedimentation II
 0x0145   0a  1 Pump-out
-0x015d   0b  1 Start-up level?
+0x015d   0b  1 Start-up level
 0x0178   0c  1 Pump-in
-0x0193   0d  1 Start-up level?
+0x0193   0d  1 Start-up level
 ```
 
 Cycle 1's 13 raw phase indices confirm the doc's existing phase-order table
 ([`eeprom-map.md`](../eeprom-map.md)) byte-for-byte — no reordering needed.
+`High water` and `Start-up level` (both previously `?`-flagged) are now
+confirmed against the board's own `J4` sensor-input silkscreen — see
+[`../eeprom-map.md`](../eeprom-map.md).
 
 **One naming nuance, not a numbering conflict:** the captured live example
 (board A, [`u2-serial-protocol.md`](../u2-serial-protocol.md)) was
