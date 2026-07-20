@@ -125,10 +125,16 @@ a phase-index byte, then a label of the form `"<cycle#> <PhaseName>"`.
 
 | Cycle | Label            | Phases (in order) |
 | ---   | ---              | --- |
-| 1     | Cleaning cycle   | High water?, Pre-Aeration, Aeration, Chemical filling, Dosing, Mixing, Sedimentation I, Sludge removal, Sedimentation II, Pump-out, Start-up level?, Pump-in, Start-up level? |
-| 2     | Waiting cycle    | Waiting, Sludge removal, High water?, Aeration, Pump-in, 3 days? |
-| 3     | Keep-alive cycle | Waiting I, High water?, Aeration, Pump-in, Waiting II, Sludge removal |
+| 1     | Cleaning cycle   | High water, Pre-Aeration, Aeration, Chemical filling, Dosing, Mixing, Sedimentation I, Sludge removal, Sedimentation II, Pump-out, Start-up level, Pump-in, Start-up level |
+| 2     | Waiting cycle    | Waiting, Sludge removal, High water, Aeration, Pump-in, 3 days? |
+| 3     | Keep-alive cycle | Waiting I, High water, Aeration, Pump-in, Waiting II, Sludge removal |
 | 4     | Test cycle       | Pump-in, Sludge removal, Pump-out, Chemical filling, Dosing, Aeration |
+
+`High water` and `Start-up level` (previously flagged `?`, uncertain OCR/reading
+of the EEPROM phase-name bytes) are now **confirmed, not guessed**: they're the
+exact silkscreen names of two of the board's 4 sensor inputs (`J4` header —
+`Startup level`, `High water`, `Chemical pressure`, `Spare`; see
+[README.md](../README.md)).
 
 **Cycle 4 (`Test cycle`), full 8-phase list + real durations — from the manual**
 (installation manual, "Test function" section; matches this EEPROM entry's 6
