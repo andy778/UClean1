@@ -16,7 +16,7 @@ Investigate if its possible to get Uponor Clean 1 into Home Assistant
 * From the modem port connect an ESPHOME (e.g ESP32 S3) and insert values into Home Assistant
 * It's 868.35MHz radio between inner unit and outer unit, and make decoding of this device in [rtl_433](https://github.com/merbanan/rtl_433/)  
 
-![PCB with text](docs/uclean1-pcb.png)
+![PCB with text](docs/uclean1-pcb.jpg)
 
 ## Two boards (dump vs. radio provenance)
 This project uses **two physical Clean 1 boards**, and it matters which artifact
@@ -78,7 +78,7 @@ pumps), so the designators fall into three matched series — one part per chann
 
 The two OC series interleave across the row as two descending runs (…OC14, OC7,
 OC13, OC6, OC12, OC5… reading left to right), read off the high-resolution
-silkscreen in `docs/uclean1-pcb.png`.
+silkscreen in `docs/uclean1-pcb.jpg`.
 
 **Confirmed by silkscreen** (a second board photo, terminal-block edge): the
 output row's screw terminals are labelled, left to right, `MV1 Compressor`,
@@ -106,6 +106,14 @@ service device" question in
 [docs/ghidra/codes.md](docs/ghidra/codes.md#4-service-device--rf-no-pairing-not-ir-two-solid-leads-no-capture-yet).
 Also visible: a gold SMA-style antenna connector next to U1, and the `Modem`
 header from [docs/u2-serial-protocol.md](docs/u2-serial-protocol.md).
+
+**Sensor inputs, confirmed by silkscreen** (`J4`, top-left, 8-pin screw
+terminal): the board has exactly **4 sensor inputs**, left to right:
+`Startup level`, `High water`, `Chemical pressure`, `Spare`. This resolves the
+"High water?" uncertainty in [docs/eeprom-map.md](docs/eeprom-map.md) — it's
+the confirmed silkscreen name, not a guess — and shows the chemical/flocculant
+side uses a **pressure** sensor, not a level float. `Spare` here is a second
+genuine unused channel (distinct from the output row's `Spare`).
 
 ## I2C Memory (U3, 128-Kbit / 16 KB)
 U3 is an M24128 EEPROM on the I2C bus at address `0x50`, read with a Raspberry Pi

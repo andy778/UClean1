@@ -13,7 +13,7 @@ This is a hardware reverse-engineering research project, **not** a software appl
   - `dumps/u2-mc9s08gt-flash.s19` — Motorola S-record dump of the U2 CPU (MC9S08GT) flash, read via a USBDM programmer.
   - `dumps/u2-mc9s08gt-flash.bin` — binary form of the above, used for analysis.
   - `dumps/u3-m24128-eeprom.bin` — full 16 KB dump of the U3 M24128 I2C EEPROM.
-- `docs/` — analysis write-ups (U3 EEPROM read/map, Ghidra firmware analysis) and `uclean1-pcb.png`, the annotated PCB photo.
+- `docs/` — analysis write-ups (U3 EEPROM read/map, Ghidra firmware analysis) and `uclean1-pcb.jpg`, the annotated PCB photo.
 
 ## Working with the firmware artifacts
 
