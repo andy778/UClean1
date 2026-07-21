@@ -1,2 +1,12 @@
 # Raw RTL-SDR IQ captures - large binaries, kept locally only.
 *.cu8
+*.cs8
+*.cf32
+
+# rtl_433 capture logs (e.g. boot.json, uclean1-*.json) - attach to issues, don't commit.
+boot.json
+uclean1-*.json
+
+# Phone photos of the board - convert to a compressed .jpg under docs/ and commit that instead.
+*.HEIC
+*.heic
