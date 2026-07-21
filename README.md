@@ -135,16 +135,15 @@ just a factory QC-pass label).
 
 **Correction from an earlier read of this photo:** `S1` and `J16` are not
 separate factory-vs-field interfaces — they're adjacent, on the same small
-sub-circuit next to the display, strongly suggesting `S1` is wired in
-**parallel with `J16`** as an onboard equivalent of the customer's external
-green Test button (the manual's 5s/10s/14s hold behavior,
-[eeprom-map.md](docs/eeprom-map.md)), not a separate factory-only path. This
-also fits the firmware: `codes.md` found only **one** flag (`DAT_014a`) for
-the physical button's long-press behavior, no evidence of two independent
-button inputs. Not yet **proven** — that needs a continuity check between
-`S1`'s pads and `J16`'s terminals with a multimeter — but the QC sticker is
-unrelated electrically, so it shouldn't have been cited as evidence either
-way. Distinct from the still-open "handheld service device" question in
+sub-circuit next to the display, and **confirmed by a continuity check**
+(multimeter, `S1`'s pads to `J16`'s terminals) to be **the same net**: `S1`
+is the onboard equivalent of the customer's external green Test button (the
+manual's 5s/10s/14s hold behavior, [eeprom-map.md](docs/eeprom-map.md)), not
+a separate factory-only path. This also fits the firmware: `codes.md` found
+only **one** flag (`DAT_014a`) for the physical button's long-press
+behavior, no evidence of two independent button inputs. The QC sticker was
+unrelated electrically and shouldn't have been cited as evidence either way.
+Distinct from the still-open "handheld service device" question in
 [docs/ghidra/codes.md](docs/ghidra/codes.md#4-service-device--rf-no-pairing-not-ir-two-solid-leads-no-capture-yet).
 Also visible: a gold SMA-style antenna connector next to U1, and the `Modem`
 header from [docs/u2-serial-protocol.md](docs/u2-serial-protocol.md).
