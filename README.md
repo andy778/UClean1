@@ -14,7 +14,7 @@ Investigate if its possible to get Uponor Clean 1 into Home Assistant
 
 ## Hypothesis
 * From the modem port connect an ESPHOME (e.g ESP32 S3) and insert values into Home Assistant
-* It's 868.35MHz radio between inner unit and outer unit, and make decoding of this device in [rtl_433](https://github.com/merbanan/rtl_433/)  
+* It's an 868.2 MHz (channel 117) radio between inner unit and outer unit, and make decoding of this device in [rtl_433](https://github.com/merbanan/rtl_433/)  
 
 ![PCB with text](docs/uclean1-pcb.jpg)
 
