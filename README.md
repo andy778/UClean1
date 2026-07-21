@@ -18,6 +18,37 @@ Investigate if its possible to get Uponor Clean 1 into Home Assistant
 
 ![PCB with text](docs/uclean1-pcb.jpg)
 
+## Status
+
+**Confirmed:** serial/GSM telemetry (`CYCLE COUNTER`/`PLANT STATUS`/`ALARM
+STATUS` over the modem port, no SIM needed); the 868.2 MHz radio frame
+(address, 32-byte payload, CRC-16) and its messaging protocol (node IDs,
+heartbeat, all 5 alarm types); the E-code/S-code/radio-type numbering; the
+7-channel actuator output mux (`MV1`–`MV5`/Compressor/Spare) and its
+self-test → alarm-code path; the `High water` sensor input, traced end to
+end from silkscreen to alarm code.
+
+**Open — highest value first:** the RF service/handheld command protocol
+(needs a live capture, static analysis can't get further); the physical
+Test-button GPIO/timer; the other 3 sensor inputs (`Startup level`,
+`Chemical pressure`, `Spare` have no traced firmware consumer yet); an
+ESP32+nRF905 TX proof-of-concept (radio config is fully known, but nothing
+has transmitted yet — the actual open question is whether the real panel
+accepts it).
+
+**Where to look:**
+
+| Doc | Covers |
+| --- | --- |
+| [docs/u2-serial-protocol.md](docs/u2-serial-protocol.md) | Serial/GSM telemetry — the working Home Assistant route |
+| [docs/rtl433-decoder.md](docs/rtl433-decoder.md) | Radio frame spec, capture recipes, rtl_433 decoder |
+| [docs/ghidra/README.md](docs/ghidra/README.md) | Payload byte map, who writes/sends it |
+| [docs/eeprom-map.md](docs/eeprom-map.md) | EEPROM layout, alarm/E-code table, actuator + sensor firmware traces |
+| [docs/ghidra/codes.md](docs/ghidra/codes.md) | The 3 separate numbering spaces (E-code/S-code/radio type), kept apart |
+| [docs/ghidra-firmware-analysis.md](docs/ghidra-firmware-analysis.md) | How the MC9S08 Ghidra analysis was run, driver map |
+| [docs/nrf9e5-firmware.md](docs/nrf9e5-firmware.md) | U1's embedded 8051/radio firmware |
+| [docs/ghidra/register-map.md](docs/ghidra/register-map.md) | Peripheral registers, cross-checked against datasheets |
+
 ## Two boards (dump vs. radio provenance)
 This project uses **two physical Clean 1 boards**, and it matters which artifact
 came from which:
