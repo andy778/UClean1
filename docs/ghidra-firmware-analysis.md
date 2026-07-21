@@ -86,7 +86,8 @@ The image is sparse:
 | Interrupt vectors | `0xFFD0–0xFFFF` |
 | Reset entry       | `0xFFFE` → `0x807F` |
 
-Auto-analysis recovers ~267 functions.
+Auto-analysis recovers 266 functions (the count checked into
+[`docs/ghidra/mc9s08gt32_full.c`](ghidra/mc9s08gt32_full.c)).
 
 ## Findings
 

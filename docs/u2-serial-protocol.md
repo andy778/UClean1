@@ -131,32 +131,18 @@ hundreds digit is the cycle (1 = cleaning, 2 = waiting, 3 = maintenance,
 | `S400`        | Test cycle started |
 | `S401`–`S408` | Test steps: pump-in, sludge-removal, pump-out, chem-fill, dose, settle, aeration I, aeration II |
 
-### `ALARM STATUS` / fault `E`-codes (three views of one fault)
+### `ALARM STATUS` / fault `E`-codes
 
 `ALARM STATUS` is `NO` when clear; a fault carries the alarm text, which the
-manual also shows as a display `E`-code. These line up with the EEPROM alarm
-table ([eeprom-map.md](eeprom-map.md)) — the SMS text, the display code, and the
-firmware byte are the same fault:
-
-| Display | SMS alarm text (EEPROM code) | Cause |
-| ---     | ---                          | --- |
-| `E011`  | No radio connection (`0x02`) | control-panel link lost |
-| `E021`  | Chemical level low (`0x15`)  | low flocculant |
-| `E031`  | High water; tank (`0x1F`)    | inlet module blocked |
-| `E032`  | High water; outlet (`0x20`)  | outlet / pump-out blocked |
-| `E040`  | Compressor fault (`0x28`)    | air-pump fault |
-| `E041`  | MV1 fault (`0x29`)           | chemical-dosing valve |
-| `E042`  | MV2 fault (`0x2A`)           | sludge-return valve |
-| `E043`  | MV3 fault (`0x2B`)           | pump-out valve |
-| `E044`  | MV4 fault (`0x2C`)           | pump-in valve |
-| `E045`  | MV5 fault (`0x2D`)           | aeration valve |
-| `E034`/`E047` | EEPROM error (`0x2F`)  | control-cabinet / program fault (exact pairing unconfirmed) |
-| `E051`  | Sludge empty remind (`0x33`) | septic section filling |
-| `E401`–`E403` | (service reminders)    | 1 / 3 / 6-year service due |
-| `E000`  | — (normal / after reset)     | no fault |
-
-So `MV1`–`MV5` are the five solenoid valves: dosing, sludge-return, pump-out,
-pump-in, aeration.
+manual also shows as a display `E`-code. The SMS text, the display code, and the
+firmware byte are three views of one fault — the full mapping (EEPROM byte ↔
+`E`-code ↔ cause, incl. `MV1`–`MV5` = dosing / sludge-return / pump-out /
+pump-in / aeration) is the canonical table in
+**[eeprom-map.md](eeprom-map.md)** ("alarm / status message table"); not
+repeated here. Serial-specific: the alarm text is what `ALARM STATUS`
+returns, and it is the same string the unit SMS-sends. `E401`–`E403` are the
+1/3/6-year service reminders and `E000` = no fault (both are serial/display-only,
+not in the EEPROM fault table).
 
 Source: Uponor Clean I installation & operation manual (03/2026) — "Reningsverkets
 status" (S-codes) and "Åtgärder vid störningar" (E-codes).

@@ -1,7 +1,7 @@
 # rtl_433 decoder for the Uponor Clean 1
 
-868.35 MHz link between inner/outer unit, decoded to MQTT for Home Assistant.
-Chip: Nordic **nRF9E5** (nRF905 transceiver + 8051 MCU) on U1.
+868.2 MHz (channel 117) link between inner/outer unit, decoded to MQTT for Home
+Assistant. Chip: Nordic **nRF9E5** (nRF905 transceiver + 8051 MCU) on U1.
 
 Decoder lives in the fork, not this repo:
 **[andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c)**.
