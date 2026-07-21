@@ -1874,7 +1874,10 @@ undefined2 FUN_a086(short param_1,byte *param_2,byte *param_3)
 // aka: mux_read_sensor_channels — reads back mux channels 0-3 (input side) via
 // the same PTBD address bus as FUN_a138, into DAT_05f6. Guarded by DAT_05f8 so
 // it never runs while the output self-test (FUN_a138) is driving the bus.
-// Scheduled periodically by FUN_a121 via FUN_8fc4 (background task).
+// Scheduled periodically by FUN_a121 via FUN_8fc4 (background task). Very
+// likely the J4 sensor header (README.md: Startup level, High water,
+// Chemical pressure, Spare) - channel 1's bit is confirmed consumed by
+// FUN_c03c to raise E031 "High water; tank", matching the silkscreen order.
 
 void FUN_a0da(void)
 
@@ -1986,6 +1989,8 @@ byte FUN_a138(void)
 
 
 ########## FUN_a1c0 @ a1c0  size=19 ##########
+// aka: read_sensor_bit — tests bit `param_1` of DAT_05f6 (the mux sensor-poll
+// result written by FUN_a0da). Only caller is FUN_c03c.
 
 bool FUN_a1c0(char param_1)
 
@@ -4152,6 +4157,13 @@ void FUN_b69c(undefined2 param_1,undefined2 param_2)
 
 
 ########## FUN_b6cd @ b6cd  size=59 ##########
+// aka: dispatch_alarm_message — generic alarm/report dispatch, indexed by
+// param_1 (not a raw E0xx code - a small table index). Looks up a message
+// pointer + params in two parallel tables at 0x06FA/0x06FC and calls
+// FUN_a66e to queue/send it. Shared by the actuator self-test
+// (FUN_c9e1 -> FUN_b6cd(i+4), i=0-5 -> E040-E045) and the sensor-fault path
+// (FUN_c03c -> FUN_b6cd(...) -> E031 "High water; tank") - one alarm-dispatch
+// mechanism for both actuator and sensor faults.
 
 void FUN_b6cd(char param_1)
 
@@ -5029,6 +5041,13 @@ void FUN_bdd8(void)
 
 
 ########## FUN_c03c @ c03c  size=343 ##########
+// aka: high_water_fault_monitor — runs once per main-loop pass (FUN_92fb).
+// Checks one DAT_05f6 bit via FUN_a1c0 (arg not statically resolved, but the
+// hardcoded alarm code below pins the channel down); if it stays set through
+// a debounce loop (FUN_9120), sets DAT_0707 = 0x1F and calls FUN_b6cd - 0x1F
+// is exactly EEPROM code E031 "High water; tank" (eeprom-map.md). Only checks
+// one channel, not a loop over all 4 J4 inputs - Startup level/Chemical
+// pressure/Spare have no equivalent traced handler.
 
 /* WARNING: Instruction at (RAM,0xc116) overlaps instruction at (RAM,0xc115)
     */
@@ -5209,7 +5228,8 @@ void FUN_c9b2(char param_1)
 // 2=MV2 (sludge-return), 3=MV3 (pump-out), 4=MV4 (pump-in), 5=MV5 (aeration),
 // 6=Spare. Writes the code into the per-channel status array at
 // 0x0717 + i*8 (same array referenced for the radio device_fault message,
-// see README.md) and calls FUN_b6cd(i+4) (not yet traced) on failure.
+// see README.md) and calls FUN_b6cd(i+4) (aka: dispatch_alarm_message, see
+// below) on failure.
 
 void FUN_c9e1(undefined1 param_1)
 
