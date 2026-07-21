@@ -197,9 +197,9 @@ elsewhere in this file):
 `FindRefsInRange.java` on `0x014a`, `0x0150`, and `0x0614` all show either no
 setter or a setter whose caller passes an unresolved argument - the actual
 button-read GPIO pin and hold-timer logic is still not pinned down. The board
-has an onboard equivalent of this button too - pushbutton `S1` sits directly
-adjacent to the `J16` "Test btn" 2-pin screw terminal (the external button's
-connector), very likely wired in parallel to it, though not proven without a
-continuity check ([README.md](../../README.md)). Either way, the remaining
-piece is finding which GPIO port bit reads the input and the timer/counter
+has an onboard equivalent of this button too - pushbutton `S1`, **confirmed
+by continuity check** ([README.md](../../README.md)) to be wired in parallel
+with the `J16` "Test btn" 2-pin screw terminal (the external button's
+connector) - same net, one logical input. The remaining piece is finding
+which GPIO port bit reads the input and the timer/counter
 that measures the hold duration.
