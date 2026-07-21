@@ -252,15 +252,56 @@ Each fault also writes into a per-channel status array at `0x0717 + i*8`
 (`0x717, 0x71F, 0x727, 0x72F, 0x737, 0x73F`) — the same array the radio
 `device_fault` message (`0x26`) draws from
 ([ghidra/README.md](ghidra/README.md)). `FUN_a0da`
-(`mux_read_sensor_channels`) reads the same `PTBD` bus for channels 0–3
-(likely the analog/level sensor side of the mux, not yet identified further)
-on a periodic background task, mutually exclusive with the self-test via
-`DAT_05f8`.
+(`mux_read_sensor_channels`) reads the same `PTBD` bus for channels 0–3 — the
+`J4` sensor header — on a periodic background task, mutually exclusive with
+the self-test via `DAT_05f8`; see the next section for how that data is
+consumed.
 
 **Still open:** exactly when `FUN_c9e1(2)` (the self-test entry point) fires —
 it's called from a phase-transition branch of the main state machine, not yet
-pinned to "every boot" vs. "every cycle start" — and `FUN_b6cd` (called on a
-failing channel, presumably the alarm-broadcast trigger) hasn't been traced.
+pinned to "every boot" vs. "every cycle start".
+
+### How the firmware handles the 4 sensor inputs — traced from `FUN_c03c`
+
+The `J4` header's 4 sensor inputs (`Startup level`, `High water`, `Chemical
+pressure`, `Spare` — [README.md](../README.md)) are read by the same mux
+mechanism as the output self-test above, but through the "sensor bank"
+(strobe bit clear): `FUN_a0da` samples channels 0–3 into `DAT_05f6`, one bit
+per input, same left-to-right order as the silkscreen.
+
+Only one consumer of that bitmap is traced: `FUN_a1c0` (`read_sensor_bit`)
+tests a single bit, and its only caller, `FUN_c03c`
+(`high_water_fault_monitor`), runs once every main-loop pass
+(`FUN_92fb`/`main_loop`). If the bit stays set through a debounce loop
+(`FUN_9120`), it sets:
+
+```
+DAT_0707 = 0x1F
+```
+
+...then calls `FUN_b6cd` (`dispatch_alarm_message`) to raise it. **`0x1F` is
+exactly EEPROM code `E031` "High water; tank"** (the alarm/status table
+above) — confirming channel 1 (`High water`) is wired all the way through:
+
+```
+sensor -> U4/U5 (signal conditioning, part number not legible in the photo)
+       -> PTBD mux -> FUN_a0da poll -> DAT_05f6 bit
+       -> FUN_a1c0 check -> FUN_c03c debounce -> FUN_b6cd -> E031
+```
+
+`FUN_b6cd` turned out to be a **generic alarm-dispatch function**, not
+actuator-specific: it indexes two tables at `0x06FA`/`0x06FC` (message
+pointer + parameters) and calls `FUN_a66e` to queue/send the result — the same
+function the actuator self-test above calls (`FUN_b6cd(i+4)` for `E040`–`E045`).
+One dispatch mechanism, two producers (actuator self-test, sensor-fault
+monitor).
+
+**Still open:** `FUN_c03c` only checks *one* hardcoded bit, not a loop over
+all 4 `J4` channels — `Startup level`, `Chemical pressure`, and `Spare` have
+no equivalent traced fault-handler yet. `Startup level` is presumably
+consulted at boot/cycle-start rather than treated as a running fault
+condition; `Chemical pressure` genuinely has no traced consumer; `Spare` is
+likely unused, consistent with the output side.
 
 ### `0x04D0–0x05BF` — actuator event / timing table
 
