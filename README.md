@@ -127,13 +127,24 @@ silkscreen — the self-test loop addresses all 7 channels through one shared
 output for an external alarm siren or building-management input, not yet
 traced in firmware.
 
-Same photo also shows, near U2: a 3-digit 7-segment display, a physical
-push-button silkscreened **`Test`**, and a separate 4-pin header silkscreened
-**`Test btn`** (for an external test button) — plus a `TEST 464 PASSED` QC
-sticker. No matching string exists in the U2 flash (checked via `strings`), so
-this is most likely a **factory test-jig interface** (assembly-line QC step),
-not a field service feature — kept distinct from the still-open "handheld
-service device" question in
+Same photo also shows, near U2: a 4-digit 7-segment display, a physical
+push-button (`S1`) silkscreened **`Test`** directly above the display, and a
+**2-pin screw terminal (`J16`)** silkscreened **`Test btn`** directly below
+it — plus a `TEST 464 PASSED` QC sticker elsewhere on the board (unrelated;
+just a factory QC-pass label).
+
+**Correction from an earlier read of this photo:** `S1` and `J16` are not
+separate factory-vs-field interfaces — they're adjacent, on the same small
+sub-circuit next to the display, strongly suggesting `S1` is wired in
+**parallel with `J16`** as an onboard equivalent of the customer's external
+green Test button (the manual's 5s/10s/14s hold behavior,
+[eeprom-map.md](docs/eeprom-map.md)), not a separate factory-only path. This
+also fits the firmware: `codes.md` found only **one** flag (`DAT_014a`) for
+the physical button's long-press behavior, no evidence of two independent
+button inputs. Not yet **proven** — that needs a continuity check between
+`S1`'s pads and `J16`'s terminals with a multimeter — but the QC sticker is
+unrelated electrically, so it shouldn't have been cited as evidence either
+way. Distinct from the still-open "handheld service device" question in
 [docs/ghidra/codes.md](docs/ghidra/codes.md#4-service-device--rf-no-pairing-not-ir-two-solid-leads-no-capture-yet).
 Also visible: a gold SMA-style antenna connector next to U1, and the `Modem`
 header from [docs/u2-serial-protocol.md](docs/u2-serial-protocol.md).
