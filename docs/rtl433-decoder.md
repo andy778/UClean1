@@ -86,7 +86,34 @@ has no numeric display, so the radio only carries what the panel can *show*: the
 
 - 4 of 5 alarm types confirmed on air (`0x20`/`0x21`/`0x22`/`0x23`, boot burst
   2026-07-06, all `state=0`). Only `0x26` (device_fault) still needs catching —
-  it was dropped in that burst; one more boot capture (`-Y minmax`) gets it.
+  it was dropped in that burst. Recipe below.
+- Every capture so far is `state=0` (all-clear). No `state=1` frame has ever
+  been recorded, so the state byte's meaning is firmware-derived, not observed.
+  The same recipe fixes both gaps at once.
+
+### Forcing a `device_fault` (`0x26`, `state=1`) — deliberate, not by waiting
+
+Rather than waiting for a real failure or hoping for a lucky boot burst, the
+actuator self-test can be made to fail on demand. `FUN_a138` walks all 7
+output channels and flags any whose readback bit never clears; `FUN_c9e1`
+turns that into `E040`–`E045`, which maps to radio type `0x26` (see
+[eeprom-map.md](eeprom-map.md)). So an open-circuit on one channel is exactly
+the condition it looks for:
+
+1. **Power off** the outer unit at the mains.
+2. Disconnect **one** actuator from the output row's screw terminals — e.g.
+   `MV5` (aeration, `E045`). One channel only, so the resulting code is
+   unambiguous.
+3. Start the capture *first*: `rtl_433 -R 321 -f 868.2M -Y minmax -F json:fault.json`
+4. Power on. The self-test runs during startup; the fault should broadcast as
+   `msg_type=0x26`, `msg_state=1`.
+5. Power off, reconnect the actuator, power on, and confirm the panel returns
+   to `E000` / all-clear (which should also yield a `state=0` frame — the
+   clear transition, also never yet captured).
+
+Expect this to also raise `E045` on the display and, if configured, send an
+SMS — it is a real fault as far as the unit is concerned, just an induced one.
+Keep it brief and don't run a treatment cycle with an actuator disconnected.
 
 ## Build & test
 
