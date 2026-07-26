@@ -12,9 +12,23 @@ SPDX-License-Identifier: MIT
 
 Investigate if its possible to get Uponor Clean 1 into Home Assistant
 
-## Hypothesis
-* From the modem port connect an ESPHOME (e.g ESP32 S3) and insert values into Home Assistant
-* It's an 868.2 MHz (channel 117) radio between inner unit and outer unit, and make decoding of this device in [rtl_433](https://github.com/merbanan/rtl_433/)  
+## Two routes, and they carry different data
+
+Both routes work; they are **complementary, not alternatives** — pick by what
+you need, or run both.
+
+| | **Serial / modem port** (Path A) | **868 MHz radio** (Path C) |
+| --- | --- | --- |
+| Carries | `CYCLE COUNTER`, `PLANT STATUS` (S-code), `ALARM STATUS` | the 5 panel alarm symbols + state, nothing else |
+| Cycle counter / phase | **yes** | **no** — firmware-confirmed absent from the payload |
+| Wiring | RS-232 tap into the styrskåp (ESP32 impersonating the Telit modem) | none — passive RTL-SDR receive |
+| Effort | wiring + a polling daemon (`HEARTBEAT=0`, so it must be polled) | plug in an SDR, run the decoder |
+
+So the **serial port is the primary telemetry route** — it's the only one with
+the counter and the treatment phase. The **radio is the zero-wiring
+complement**: it gives alarms only, but needs no access to the cabinet. The
+original hypothesis (ESP32 on the modem port → Home Assistant) still stands;
+the rtl_433 decoder came out of the radio side and is useful in its own right.
 
 ![PCB with text](docs/uclean1-pcb.jpg)
 
