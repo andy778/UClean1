@@ -8,6 +8,12 @@ Decoder lives in the fork, not this repo:
 It is **enabled**, CRC-gated, and tested end-to-end against a real capture
 (zero false positives on an unrelated 433 MHz capture).
 
+Building a decoder, a TX implementation, or extending this one? Start with
+**[docs/rtl433-implementation-spec.md](rtl433-implementation-spec.md)** — a
+self-contained spec with test vectors, meant to be implementable without
+reading the rest of this page first. This page is the narrative/provenance;
+that one is the reference.
+
 ## Capture
 
 ```bash

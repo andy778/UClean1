@@ -56,6 +56,7 @@ accepts it).
 | --- | --- |
 | [docs/u2-serial-protocol.md](docs/u2-serial-protocol.md) | Serial/GSM telemetry — the working Home Assistant route |
 | [docs/rtl433-decoder.md](docs/rtl433-decoder.md) | Radio frame spec, capture recipes, rtl_433 decoder |
+| [docs/rtl433-implementation-spec.md](docs/rtl433-implementation-spec.md) | Self-contained implementation spec + test vectors — start here to build a decoder or TX in any language |
 | [docs/ghidra/README.md](docs/ghidra/README.md) | Payload byte map, who writes/sends it |
 | [docs/eeprom-map.md](docs/eeprom-map.md) | EEPROM layout, alarm/E-code table, actuator + sensor firmware traces |
 | [docs/ghidra/codes.md](docs/ghidra/codes.md) | The 3 separate numbering spaces (E-code/S-code/radio type), kept apart |
