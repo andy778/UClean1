@@ -223,15 +223,16 @@ plain power-cycle triggers it:
    should broadcast `msg_type=0x22`, `msg_state=1` (E045 on the display).
 5. Reconnect, power-cycle again, confirm a `state=0` clear frame.
 
-Note: the current reference decoder still uses the old type names, so it
-will label this frame `high_water` until it is updated (§8).
+Note: the reference decoder already uses the corrected type names (§8), so a
+correct capture of this frame should label it `device_fault`, not
+`high_water`.
 
 Full recipe with rationale: [`rtl433-decoder.md`](rtl433-decoder.md).
 
 ## 8. Reference implementation
 
 A C decoder for [rtl_433](https://github.com/merbanan/rtl_433) exists:
-[andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c).
+[andy778/rtl_433, branch `add-uponor-clean1-upstream`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1-upstream/src/devices/uponor_clean1.c).
 It implements address-sync via `bitbuffer_search`, all three validation gates
 from §3 (nRF905 CRC, `hdr_len == 12+N`, application CRC), `id` = `node_src`
 with the recipient as a separate `node_dst` field, the §4 type names, and a

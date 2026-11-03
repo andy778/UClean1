@@ -23,7 +23,7 @@ doc disagree, that's a bug in one of them — flag it, don't silently pick one.
 ## Where the code lives
 
 The decoder is **not in this repo**. It's in a fork:
-[andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c),
+[andy778/rtl_433, branch `add-uponor-clean1-upstream`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1-upstream/src/devices/uponor_clean1.c),
 a fork of upstream [merbanan/rtl_433](https://github.com/merbanan/rtl_433) —
 not yet upstreamed (no `state=1` frame or `0x26` frame has been seen on air
 yet). The spec §3–§4 corrections are in the decoder since
@@ -33,7 +33,7 @@ research and spec live.
 
 ## Workflow for a decoder change
 
-1. **Branch off `add-uponor-clean1`**, not `master` — that branch is the
+1. **Branch off `add-uponor-clean1-upstream`**, not `master` — that branch is the
    accumulated, CONTRIBUTING.md-compliant decoder state.
 2. **Cross-check against the spec** before writing code — most bugs in this
    decoder's history came from not doing this (e.g. an early version reported
@@ -58,7 +58,7 @@ research and spec live.
    compliance (field naming, `output_fields[]` matching `data_make()`, return
    value idiom). Both passes should read the code directly and cite line
    numbers, not speculate.
-6. **Open the PR against `add-uponor-clean1`** (not upstream — see "Where the
+6. **Open the PR against `add-uponor-clean1-upstream`** (not upstream — see "Where the
    code lives"), with a test plan showing what was actually run, not just
    "should work."
 7. If the change affects protocol understanding (new field, corrected
@@ -109,5 +109,5 @@ confirmed fact for everyone after you.
 - [ ] Verified against a real capture or the spec's test vectors, not just
       "compiles"
 - [ ] Reviewed by a second pass (correctness + convention), findings resolved
-- [ ] PR opened against `add-uponor-clean1` with an honest test plan
+- [ ] PR opened against `add-uponor-clean1-upstream` with an honest test plan
 - [ ] Spec updated in this repo if protocol understanding changed

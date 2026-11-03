@@ -11,8 +11,8 @@ this page exists to keep them apart and give each a `#define`-able name.
 Meanings and live sources are the canonical table in
 [`README.md`](README.md#the-5-message-types); these are just the
 `#define`-able names for it. The rtl_433 decoder's `msg_name` field
-(`add-uponor-clean1` branch) still uses an older, shifted set of names —
-see the spec §8.
+(`add-uponor-clean1-upstream` branch) already uses these corrected names, not
+the older shifted set — see the spec §8.
 
 ```c
 #define UCLEAN1_MSG_CHEMICAL_LOW    0x20  // E021

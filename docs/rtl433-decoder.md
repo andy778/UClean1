@@ -4,7 +4,7 @@
 Assistant. Chip: Nordic **nRF9E5** (nRF905 transceiver + 8051 MCU) on U1.
 
 Decoder lives in the fork, not this repo:
-**[andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c)**.
+**[andy778/rtl_433, branch `add-uponor-clean1-upstream`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1-upstream/src/devices/uponor_clean1.c)**.
 It is **enabled**, CRC-gated, and tested end-to-end against a real capture
 (zero false positives on an unrelated 433 MHz capture).
 
@@ -157,7 +157,7 @@ Keep it brief and don't run a treatment cycle with an actuator disconnected.
 
 ## Build & test
 
-The decoder lives on the `add-uponor-clean1` branch of
+The decoder lives on the `add-uponor-clean1-upstream` branch of
 [andy778/rtl_433](https://github.com/andy778/rtl_433), a fork of upstream
 [merbanan/rtl_433](https://github.com/merbanan/rtl_433) — not yet upstreamed.
 
@@ -167,7 +167,7 @@ pkg-config`.
 
 ```bash
 git clone https://github.com/andy778/rtl_433 && cd rtl_433
-git checkout add-uponor-clean1
+git checkout add-uponor-clean1-upstream
 mkdir build && cd build && cmake .. && make -j
 ./src/rtl_433 -r capture.cu8 -F json   # decoder is enabled, no -R needed
 ```
