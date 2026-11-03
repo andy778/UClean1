@@ -211,15 +211,17 @@ Upstream rtl_433 ships `examples/rtl_433_mqtt_hass.py`, a small bridge that
 subscribes to the rtl_433 events topic and publishes [Home Assistant MQTT
 discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
 config messages, so decoded devices show up as HA entities automatically
-instead of needing hand-written `configuration.yaml` sensors. **The fork
-carries its own copy of this file, not byte-identical to upstream** — notably
-its `mappings` dict (which maps known field names to HA `device_class`/icon)
-doesn't include `leaking`/`reading`/`daily_reading`, and `-I/--ids` filters by
-`int` instead of `str`. Neither difference affects a plain run against this
-decoder; check the fork's copy if you rely on either.
+instead of needing hand-written `configuration.yaml` sensors. **It's a
+template, not a finished tool** — copy it out of `examples/` into your own
+setup and edit it, rather than invoking rtl_433's copy in place. The fork
+carries its own copy, not byte-identical to upstream (notably its `mappings`
+dict doesn't include `leaking`/`reading`/`daily_reading`, and `-I/--ids`
+filters by `int` instead of `str`) — start from that copy and keep editing
+from there.
 
 ```bash
-python3 examples/rtl_433_mqtt_hass.py \
+cp examples/rtl_433_mqtt_hass.py ~/uclean1_mqtt_hass.py
+python3 ~/uclean1_mqtt_hass.py \
   -H localhost -p 1883 -u USERNAME -P PASSWORD \
   -R "uclean1/events" -D homeassistant
 ```
@@ -233,11 +235,11 @@ python3 examples/rtl_433_mqtt_hass.py \
 - `-i`/`--interval` controls how often configs are republished (default 600 s)
   and `-r`/`--retain` retains them so HA sees the entities again after an HA
   restart without rtl_433 needing to re-publish first.
-- This decoder's fields (`msg_type`, `msg_state`, etc.) aren't in the script's
-  `mappings` dict, so expect plain generic sensor entities rather than ones
-  with alarm-specific icons/device classes — map them in your own copy of the
-  `mappings` dict if you want nicer HA entities, rather than patching the
-  decoder itself.
-- Run both processes (`rtl_433 -F mqtt://...` and `rtl_433_mqtt_hass.py`) as
+- This decoder's fields (`msg_type`, `msg_state`, etc.) aren't in the
+  template's `mappings` dict, so run as-is it'll produce plain generic sensor
+  entities rather than ones with alarm-specific icons/device classes. Add
+  entries for this decoder's fields to your copy's `mappings` dict for nicer
+  HA entities — that's the expected customization step, not a workaround.
+- Run both processes (`rtl_433 -F mqtt://...` and your edited copy) as
   long-running services (systemd units, or alongside HA's own add-ons) so
   discovery configs get republished and HA keeps seeing fresh state.
