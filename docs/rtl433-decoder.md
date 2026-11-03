@@ -172,11 +172,12 @@ mkdir build && cd build && cmake .. && make -j
 ./src/rtl_433 -r capture.cu8 -F json   # decoder is enabled, no -R needed
 ```
 
-For live capture: tune ~150 kHz low (`-f 868.20M`) so the carrier clears the
-RTL-SDR DC spike, `-Y minmax` (needed for the weaker far-unit packet).
+For live capture, use the settings this branch documents and the "Receivers
+tested" table above already validated live: `-f 868.05M -s 1000k`, `-Y minmax`
+(needed for the weaker far-unit packet).
 
 ```bash
-./src/rtl_433 -f 868.20M -Y minmax -F json
+./src/rtl_433 -f 868.05M -s 1000k -Y minmax -F json
 ```
 
 ## MQTT output
@@ -186,7 +187,7 @@ broker — no code changes needed, this is an upstream feature the fork
 inherits as-is:
 
 ```bash
-./src/rtl_433 -f 868.20M -Y minmax \
+./src/rtl_433 -f 868.05M -s 1000k -Y minmax \
   -F "mqtt://localhost:1883,user=USERNAME,pass=PASSWORD,retain=0,events=uclean1/events"
 ```
 
@@ -212,16 +213,23 @@ subscribes to the rtl_433 events topic and publishes [Home Assistant MQTT
 discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
 config messages, so decoded devices show up as HA entities automatically
 instead of needing hand-written `configuration.yaml` sensors. **It's a
-template, not a finished tool** — copy it out of `examples/` into your own
-setup and edit it, rather than invoking rtl_433's copy in place. The fork
-carries its own copy, not byte-identical to upstream (notably its `mappings`
-dict doesn't include `leaking`/`reading`/`daily_reading`, and `-I/--ids`
-filters by `int` instead of `str`) — start from that copy and keep editing
-from there.
+template, meant to be copied and edited, not run unmodified** — it only
+publishes a discovery config for a field if that field's name is a key in
+its `mappings` dict; anything else is silently skipped, not published as a
+generic entity. The `add-uponor-clean1-upstream` branch's copy of this file
+is the same as real upstream's (same `mappings` entries, `-I/--ids` filters
+by `str` on both), so it has no entries for this decoder's own fields
+(`msg_name`, `msg_state`, `msg_type`, `role`) — without adding them yourself,
+those fields would never reach Home Assistant at all.
+
+[`tools/rtl_433_mqtt_hass_uclean1.py`](../tools/rtl_433_mqtt_hass_uclean1.py)
+in this repo is that upstream file with those four fields already mapped
+(an `msg_state` binary_sensor with `device_class: problem`, an `msg_name`
+sensor, and diagnostic sensors for `msg_type`/`role`) — use it as-is, or as
+the base for further customization:
 
 ```bash
-cp examples/rtl_433_mqtt_hass.py ~/uclean1_mqtt_hass.py
-python3 ~/uclean1_mqtt_hass.py \
+python3 tools/rtl_433_mqtt_hass_uclean1.py \
   -H localhost -p 1883 -u USERNAME -P PASSWORD \
   -R "uclean1/events" -D homeassistant
 ```
@@ -235,11 +243,9 @@ python3 ~/uclean1_mqtt_hass.py \
 - `-i`/`--interval` controls how often configs are republished (default 600 s)
   and `-r`/`--retain` retains them so HA sees the entities again after an HA
   restart without rtl_433 needing to re-publish first.
-- This decoder's fields (`msg_type`, `msg_state`, etc.) aren't in the
-  template's `mappings` dict, so run as-is it'll produce plain generic sensor
-  entities rather than ones with alarm-specific icons/device classes. Add
-  entries for this decoder's fields to your copy's `mappings` dict for nicer
-  HA entities — that's the expected customization step, not a workaround.
-- Run both processes (`rtl_433 -F mqtt://...` and your edited copy) as
+- `msg_state` is only present on alarm frames (`msg_type` 0x20/0x21/0x22/0x23/
+  0x26), not on heartbeat/ack frames — so the "Uponor Alarm Active" entity
+  only appears in HA after the first real alarm frame is seen, not at startup.
+- Run both processes (`rtl_433 -F mqtt://...` and this script) as
   long-running services (systemd units, or alongside HA's own add-ons) so
   discovery configs get republished and HA keeps seeing fresh state.
