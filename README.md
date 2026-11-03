@@ -111,16 +111,45 @@ telemetry falls out. Full write-up, wiring, command grammar, and the
 | U2       | CPU         | [MC9S08GT32ACFBE](https://www.nxp.com/docs/en/data-sheet/MC9S08GB60A.pdf)  |
 | U10      | Serial      | [sipex 3232](https://www.silicon-ark.co.uk/datasheets/sp3222_3232e-datasheet-sipex.pdf)   |
 | U3       | I2C Mem     | [4128BWP 8424K](https://www.st.com/en/memories/m24128-bw.html) |
-| OC8–OC14 | Optoisolator| MOC3063 1512 |
-| D6–D12   | Mosfet      | VNE46 AC 4DLMG |
-| OC1–OC7  | Mosfet      | 1435 814 |
+| OC8–OC14 | Zero-cross triac-driver opto | MOC3063 1512 (TLP3063 on some boards) |
+| D6–D12   | Triac       | MAC4DLMG (ON Semi, DPAK, 4 A / 600 V; marking `AC 4DLMG`, `VNE46` = date/lot code) |
+| OC1–OC7  | AC-input phototransistor opto | 814 family (LTV-814 / EL814 / PC814); `1435` is likely a date code |
+| U4, U5   | Analog mux  | HEF4051BT |
+| U6       | Shift register (output latch) | HEF4094BT |
+| U9       | Darlington driver | ULN2003 |
 
 The board carries a row of **seven identical output-driver channels** (the
 repeated stages that switch the magnetventiler MV1–MV5, the compressor and the
 pumps), so the designators fall into three matched series — one part per channel:
-* **D6–D12** are all the same VNE46 mosfet as D11.
-* **OC1–OC7** are all the same 1435 814 mosfet as OC6.
+* **D6–D12** are all the same MAC4DLMG triac as D11.
+* **OC1–OC7** are all the same 814 sensing opto as OC6.
 * **OC8–OC14** are all the same MOC3063 optoisolator as OC13.
+
+(The `AC 4DLMG` marking and ON Semi logo on D6–D12 are visible in the board
+photo; the U4–U9 markings were read from a second board, not yet checked on
+this one.)
+
+**One output channel**, control path: output byte `DAT_05F7` → `FUN_a1d3`
+shifts it MSB first into U6 (`PTD0` data, `PTD3` clock, `PTD1` strobe) → U9 →
+control opto OC8–OC14 → triac D6–D12 → coil on the screw terminal. Sensing
+path: four 39 kΩ resistors in series with the LED of the 814 opto, across the
+triac; the opto output goes through U4/U5 to `PTB0` for the self-test.
+
+| Code | Function | Terminal | Sensing opto | 39 kΩ chain | Control opto | Triac |
+| --- | --- | --- | --- | --- | --- | --- |
+| E040 | Compressor | J6 | OC1 | R34–R37 | OC8 | D6 |
+| E041 | MV1 dosing | J7 | OC2 | R39–R42 | OC9 | D7 |
+| E042 | MV2 sludge return | J8 | OC3 | R44–R47 | OC10 | D8 |
+| E043 | MV3 pump out | J9 | OC4 | R49–R52 | OC11 | D9 |
+| E044 | MV4 pump in | J10 | OC5 | R54–R57 | OC12 | D10 |
+| E045 | MV5 aeration | J11 | OC6 | R59–R62 | OC13 | D11 |
+| – | Spare | J12 | OC7 | R64–R67 | OC14 | D12 |
+
+Each 39 kΩ chain dissipates ~0.34 W whenever its output is off. Overheated,
+lifted chain resistors are a known cause of false E040–E045 faults (forum
+repairs replace them with ≥0.5 W leaded resistors); see
+[docs/eeprom-map.md](docs/eeprom-map.md#how-the-firmware-addresses-the-7-output-channels--traced-from-fun_a138)
+for what the self-test can and can't detect.
 
 The two OC series interleave across the row as two descending runs (…OC14, OC7,
 OC13, OC6, OC12, OC5… reading left to right), read off the high-resolution
@@ -139,8 +168,11 @@ silkscreen — the self-test loop addresses all 7 channels through one shared
 `PTBD` mux bus, not individual GPIOs, and its per-channel fault codes
 (`channel_index + 0x28`) match `E040`–`E045` exactly. `Alarm` is a separate
 2-pin terminal (not part of the output row) — likely a dry-contact/relay
-output for an external alarm siren or building-management input, not yet
-traced in firmware.
+output for an external alarm siren or building-management input. In firmware,
+bit 7 of the output byte `DAT_05F7` is set whenever any alarm is active
+(`FUN_e0e5` → `FUN_a32f`/`FUN_a334`), including E051; it most likely drives
+this terminal, but the trace from U6's output to the terminal hasn't been
+checked on the board.
 
 Same photo also shows, near U2: a 4-digit 7-segment display, a physical
 push-button (`S1`) silkscreened **`Test`** directly above the display, and a
@@ -154,9 +186,9 @@ sub-circuit next to the display, and **confirmed by a continuity check**
 (multimeter, `S1`'s pads to `J16`'s terminals) to be **the same net**: `S1`
 is the onboard equivalent of the customer's external green Test button (the
 manual's 5s/10s/14s hold behavior, [eeprom-map.md](docs/eeprom-map.md)), not
-a separate factory-only path. This also fits the firmware: `codes.md` found
-only **one** flag (`DAT_014a`) for the physical button's long-press
-behavior, no evidence of two independent button inputs. The QC sticker was
+a separate factory-only path. This also fits the firmware: one hold-time
+handler (`FUN_a245`) serves the button, with no evidence of two independent
+button inputs. The QC sticker was
 unrelated electrically and shouldn't have been cited as evidence either way.
 Distinct from the still-open "handheld service device" question in
 [docs/ghidra/codes.md](docs/ghidra/codes.md#4-service-device--rf-no-pairing-not-ir-two-solid-leads-no-capture-yet).
@@ -165,18 +197,21 @@ header from [docs/u2-serial-protocol.md](docs/u2-serial-protocol.md).
 
 **Sensor inputs, confirmed by silkscreen** (`J4`, top-left, 8-pin screw
 terminal): the board has exactly **4 sensor inputs**, left to right:
-`Startup level`, `High water`, `Chemical pressure`, `Spare`. This resolves the
-"High water?" uncertainty in [docs/eeprom-map.md](docs/eeprom-map.md) — it's
-the confirmed silkscreen name, not a guess — and shows the chemical/flocculant
-side uses a **pressure** sensor, not a level float. `Spare` here is a second
-genuine unused channel (distinct from the output row's `Spare`). Two 14-pin
-SOICs (`U4`/`U5`, part numbers not legible in the photo) sit directly behind
-the header, likely conditioning the 4 raw signals before U2 reads them.
+`Startup level`, `High water`, `Chemical pressure`, `Spare`. The
+chemical/flocculant side uses a **pressure** sensor, not a level float.
+This `Spare` is a separate input from the output row's `Spare`; in firmware it
+is the pump-station high-water input (E033). Two SOICs (`U4`/`U5`, HEF4051BT analog
+muxes) sit directly
+behind the header and route these inputs and the output-sensing optos to U2.
 **Firmware-traced** for the `High water` channel specifically
 ([docs/eeprom-map.md](docs/eeprom-map.md#how-the-firmware-handles-the-4-sensor-inputs--traced-from-fun_c03c)):
 sensor → mux → `FUN_a0da` poll → `FUN_c03c` debounce → alarm code `0x1F`,
-exactly EEPROM `E031` "High water; tank". The other 3 channels don't have an
-equivalent traced handler yet.
+exactly EEPROM `E031` "High water; tank". The other three (static analysis,
+not yet confirmed on hardware):
+`Chemical pressure` is read once per cycle after mixing (E021 on the 2nd
+consecutive failure), `Startup level` is checked after pump-out (E032 on the
+2nd consecutive time) and decides the next cycle, and `Spare` raises E033
+after 1 h active.
 
 ## I2C Memory (U3, 128-Kbit / 16 KB)
 U3 is an M24128 EEPROM on the I2C bus at address `0x50`, read with a Raspberry Pi

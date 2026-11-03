@@ -9,99 +9,114 @@ this page exists to keep them apart and give each a `#define`-able name.
 ## 1. Radio message type (`payload[11]`, 5 values) — CONFIRMED in firmware
 
 Meanings and live sources are the canonical table in
-[`README.md`](README.md#the-5-message-types--panel-symbols); these are just
-the `#define`-able names for it, already wired into the rtl_433 decoder's
-`msg_type`/`msg_name` fields (`add-uponor-clean1` branch):
+[`README.md`](README.md#the-5-message-types); these are just the
+`#define`-able names for it. The rtl_433 decoder's `msg_name` field
+(`add-uponor-clean1` branch) still uses an older, shifted set of names —
+see the spec §8.
 
 ```c
-#define UCLEAN1_MSG_STATUS          0x20  // OK / green LED
-#define UCLEAN1_MSG_CHEMICAL_LOW    0x21
-#define UCLEAN1_MSG_HIGH_WATER      0x22
-#define UCLEAN1_MSG_SLUDGE_REMINDER 0x23
-#define UCLEAN1_MSG_DEVICE_FAULT    0x26
-#define UCLEAN1_MSG_HEARTBEAT       0x24  // poll opcode, not an alarm type
+#define UCLEAN1_MSG_CHEMICAL_LOW    0x20  // E021
+#define UCLEAN1_MSG_HIGH_WATER      0x21  // E031, E032, E033
+#define UCLEAN1_MSG_DEVICE_FAULT    0x22  // E040-E045, E047
+#define UCLEAN1_MSG_SLUDGE_REMINDER 0x23  // E051
+#define UCLEAN1_MSG_GSM_FAULT       0x26  // E012
+#define UCLEAN1_MSG_HEARTBEAT       0x24  // heartbeat opcode, not an alarm type
 ```
 
-Confirmed on air (boot-burst capture 2026-07-06): `0x20`/`0x21`/`0x22`/`0x23`
-all with `state=0`; only `0x26` (device_fault) still uncaptured (dropped in the
-burst).
+Seen on air (boot-burst capture 2026-07-06): `0x20`/`0x21`/`0x22`/`0x23`
+all with `state=0`; `0x26` not yet seen.
 
-## 2. EEPROM alarm-table byte (`0x0000–0x05BF` table, 12 values) — from the dump
+## 2. Alarm code byte (14 values) — from the dump and the RAM record templates
 
 The 1-byte code at the start of each entry in
-[`eeprom-map.md`](../eeprom-map.md)'s alarm/status message table — a
-**different, finer-grained** numbering than the radio type above (e.g. radio
-type `0x26` "device fault" covers *five* of these, one per failed actuator).
-`#define`-able names, cross-referenced to which radio type each rolls up
-into:
+[`eeprom-map.md`](../eeprom-map.md)'s alarm/status message table, also
+written as the template byte of each RAM alarm record (`0x06F6 + 8·i`,
+`0xbe20`–`0xbe98`). A **different, finer-grained** numbering than the radio
+type above (e.g. radio type `0x22` "device fault" covers seven of these).
+**The display code is the decimal value of the code byte** (`0x2F` = 47 →
+`E047`). `#define`-able names, cross-referenced to which radio type each
+rolls up into:
 
 ```c
-#define UCLEAN1_E_NO_RADIO_CONN     0x02  // -> E011
-#define UCLEAN1_E_CHEMICAL_LOW      0x15  // -> E021  (== radio type 0x21)
-#define UCLEAN1_E_HIGH_WATER_TANK   0x1F  // -> E031  (== radio type 0x22)
-#define UCLEAN1_E_HIGH_WATER_OUTLET 0x20  // -> E032  (== radio type 0x22)  ** COLLIDES with radio type 0x20 (status) - not the same code space! **
-#define UCLEAN1_E_COMPRESSOR_FAULT  0x28  // -> E040  (== radio type 0x26)
-#define UCLEAN1_E_MV1_FAULT         0x29  // -> E041  (== radio type 0x26)
-#define UCLEAN1_E_MV2_FAULT         0x2A  // -> E042  (== radio type 0x26)
-#define UCLEAN1_E_MV3_FAULT         0x2B  // -> E043  (== radio type 0x26)
-#define UCLEAN1_E_MV4_FAULT         0x2C  // -> E044  (== radio type 0x26)
-#define UCLEAN1_E_MV5_FAULT         0x2D  // -> E045  (== radio type 0x26)
-#define UCLEAN1_E_EEPROM_ERROR      0x2F  // -> E034 / E047 (pairing unconfirmed) (== radio type 0x26)
+#define UCLEAN1_E_NO_RADIO_CONN     0x0B  // -> E011  (never sent on radio)
+#define UCLEAN1_E_GSM_FAULT         0x0C  // -> E012  (== radio type 0x26)
+#define UCLEAN1_E_CHEMICAL_LOW      0x15  // -> E021  (== radio type 0x20)
+#define UCLEAN1_E_HIGH_WATER_TANK   0x1F  // -> E031  (== radio type 0x21)
+#define UCLEAN1_E_HIGH_WATER_OUTLET 0x20  // -> E032  (== radio type 0x21)  ** COLLIDES with radio type 0x20 (chemical_low) - not the same code space! **
+#define UCLEAN1_E_HIGH_WATER_PUMPST 0x21  // -> E033  (== radio type 0x21)
+#define UCLEAN1_E_COMPRESSOR_FAULT  0x28  // -> E040  (== radio type 0x22)
+#define UCLEAN1_E_MV1_FAULT         0x29  // -> E041  (== radio type 0x22)
+#define UCLEAN1_E_MV2_FAULT         0x2A  // -> E042  (== radio type 0x22)
+#define UCLEAN1_E_MV3_FAULT         0x2B  // -> E043  (== radio type 0x22)
+#define UCLEAN1_E_MV4_FAULT         0x2C  // -> E044  (== radio type 0x22)
+#define UCLEAN1_E_MV5_FAULT         0x2D  // -> E045  (== radio type 0x22)
+#define UCLEAN1_E_EEPROM_ERROR      0x2F  // -> E047  (== radio type 0x22)
 #define UCLEAN1_E_SLUDGE_REMINDER   0x33  // -> E051  (== radio type 0x23)
 ```
 
-**The `0x20` collision is real and deliberate on the firmware's part, not a
-copy error here**: EEPROM code `0x20` = "High water; outlet" (`E032`), but
-radio type `0x20` = "status/OK". They are unrelated numbers that happen to
-match — always qualify which table a bare `0x20` belongs to.
+E011 was previously listed here as `0x02`; the byte before "No radio
+connection" in the EEPROM table is `0x0B`, and the RAM template is written
+as `0x0B` (`0xbe7f: lda #$0b; sta $06f6`). E012 and E033 are in the flash
+copy of the text table but not the EEPROM one.
 
-## 3. Manual S-codes (`S101`–`S408`) — SOLVED: it's arithmetic, not a lookup table
+**The `0x20` collision is real, not a copy error here**: alarm code `0x20` =
+"High water; outlet" (`E032`), but radio type `0x20` = chemical_low. They are
+unrelated numbers that happen to match — always qualify which table a bare
+`0x20` belongs to.
 
-`RAM 0x0613` = phase-within-cycle, `RAM 0x0614` = cycle number (1=cleaning,
-2=waiting, 3=maintenance, 4=test — capped `< 5` where it's set,
-[`mc9s08gt32_full.c:5070`](mc9s08gt32_full.c)). The S-code is simply:
+## 3. Manual S-codes (`S101`–`S408`) — a lookup table over the raw phase
+
+`RAM 0x0613` = raw phase-within-cycle, `RAM 0x0614` = cycle number
+(1=cleaning, 2=waiting, 3=keep-alive, 4=test — capped `< 5` where it's set,
+[`mc9s08gt32_full.c:5070`](mc9s08gt32_full.c)). Radio cmd 3 returns these
+raw values, for which `100 * cycle + phase` is a convenient label:
 
 ```c
-#define UCLEAN1_SCODE(cycle, phase)  (100 * (cycle) + (phase))  // "S<cycle><phase:02>"
+#define UCLEAN1_RAW_SCODE(cycle, phase)  (100 * (cycle) + (phase))  // raw phase, NOT the displayed S-code
 ```
 
-Confirmed against the raw EEPROM phase table
+**The display and the status SMS do not use that formula.** `FUN_ca9c` maps
+the raw phase through one table per cycle (flash `0x8885` cycle 1, `0x8905`
+cycle 2, `0x8977` cycle 3; the test cycle isn't mapped), and the result
+matches the manual's S-code table:
+
+| Cycle | Raw phase → displayed S-code |
+| --- | --- |
+| 1 | 1–3 → `S102`, 4 → `S103`, 5 → `S104`, 6 → `S105`, 7 → `S106`, 8 → `S107`, 9 → `S108`, 10–11 → `S109`, 12–13 → `S101` |
+| 2 | 1 → `S201`, 2–3 → `S202`, 4 → `S203`, 5–6 → `S204` |
+| 3 | 1–2 → `S301`, 3 → `S302`, 4 → `S303`, 5 → `S304`, 6 → `S305` |
+
+So the captured `PLANT STATUS:S102` (board A,
+[`u2-serial-protocol.md`](../u2-serial-protocol.md)) means raw phase 1–3,
+i.e. high-water check, pre-aeration or aeration — the manual's "Aeration".
+
+The raw EEPROM phase table
 ([`dumps/u3-m24128-eeprom.bin`](../../dumps/u3-m24128-eeprom.bin)
-`0x0040–0x031B`), which stores an **explicit 1-byte phase index right before
-each phase label** (not just positional order — this is a hard byte-level
-check, done by reading the dump directly):
+`0x0040–0x031B`) stores an **explicit 1-byte raw phase index right before
+each phase label**. Offsets below are of that index byte:
 
 ```
 offset  idx  label                  offset  idx  label
-0x004c  (1)  Cleaning cycle         0x027c  (1)  Waiting I    [cycle 3]
-0x0063   01  1 High water           0x0289  0b   3 High water
-0x007d   02  1 Pre-Aeration         0x029c   03  3 Aeration
-0x0097   03  1 Aeration             0x02aa   04  3 Pump-in
-0x00ac   04  1 Chemical filling     0x02bb   05  3 Waiting II
-0x00c5   05  1 Dosing               0x02cf   06  3 Sludge removal
-0x00dd   06  1 Mixing
-0x00f7   07  1 Sedimentation I
-0x0111   08  1 Sludge removal
-0x012c   09  1 Sedimentation II
-0x0145   0a  1 Pump-out
-0x015d   0b  1 Start-up level
-0x0178   0c  1 Pump-in
-0x0193   0d  1 Start-up level
+0x0063   01  1 High water?          0x01cc   01  2 Waiting
+0x007d   02  1 Pre-Aeration         0x01e6   02  2 Sludge removal
+0x0097   03  1 Aeration             0x0200   03  2 High water?
+0x00b1   04  1 Chemical filling     0x021a   04  2 Aeration
+0x00cb   05  1 Dosing               0x0234   05  2 Pump-in
+0x00e5   06  1 Mixing
+0x00ff   07  1 Sedimentation I      0x027f   01  3 Waiting I
+0x0119   08  1 Sludge removal       0x0299   02  3 High water?
+0x0133   09  1 Sedimentation II     0x02b3   03  3 Aeration
+0x014d   0a  1 Pump-out             0x02cd   04  3 Pump-in
+0x0167   0b  1 Start-up level?      0x02e7   05  3 Waiting II
+0x0181   0c  1 Pump-in              0x0301   06  3 Sludge removal
+0x019b   0d  1 Start-up level?
 ```
 
-Cycle 1's 13 raw phase indices confirm the doc's existing phase-order table
-([`eeprom-map.md`](../eeprom-map.md)) byte-for-byte — no reordering needed.
-`High water` and `Start-up level` (both previously `?`-flagged) are now
-confirmed against the board's own `J4` sensor-input silkscreen — see
-[`../eeprom-map.md`](../eeprom-map.md).
-
-**One naming nuance, not a numbering conflict:** the captured live example
-(board A, [`u2-serial-protocol.md`](../u2-serial-protocol.md)) was
-`DAT_0614=1, DAT_0613=2` -> `S102`. EEPROM's own label for cycle1/phase2 is
-`"Pre-Aeration"`, while the manual's S-code table calls `S102` **"Aeration"**.
-Same number, same formula, just the manual's plain-language gloss doesn't
-distinguish "Pre-Aeration" from "Aeration" as sharply as the firmware's
-internal label does — not a sign the formula or the phase order is wrong.
+The labels are literally `"High water?"` and `"Start-up level?"`, question
+marks included — they are checks, not sensor names. An earlier version of this
+table gave cycle 3's "High water" index as `0x0B`; that byte is part of a
+`0x0BB8` duration field, and the real index is `0x02` (cycle 3's handler at
+`0xc719` only accepts phases 1–6).
 
 ## 4. "Service device" — RF, no pairing, not IR: two solid leads, no capture yet
 
@@ -124,43 +139,36 @@ begin with. This would need confirming from a second unit's firmware to be
 certain, but it fits every observation so far without inventing a special
 protocol.
 
-**Lead B — the firmware has a radio-triggered command path, it just can't be
-traced to its source statically.** `FUN_ca4e` (`set_active_cycle`) starts a
-test cycle, gated by flag `DAT_013b`. That flag has exactly two assignments in
-the whole 266-function dump and **both are clears** (init + clear-after-use);
-nothing statically sets it nonzero — the same computed/indirect-store pattern
-as the Test-button flags (`0x014a`, `0x0150`, §5). The radio RX validator
-(`FUN_caee`, aka `radio_rx_ack_validator`) exists and processes incoming
-addressed frames. Put together with the field observation that the handheld
-**does** start a test cycle over the air, the conclusion is: a received radio
-command sets `DAT_013b` (and probably `0x014a`/`0x0150`) via a computed store,
-and the main loop (`FUN_c03c`) acts on it. We can see the *effect* and the
-*action* but not the *decode* of the command frame — because it's an indirect
-write and because we've never captured the frame that causes it.
+**Lead B — the firmware has a full radio command interface**, recovered
+statically from the dispatcher `FUN_d07a` (jump table `0xd0da`, commands
+1–30 plus `0x30`–`0x32`, `0x80`, `0x81`); the full table is in
+[#113](https://github.com/andy778/UClean1/issues/113) §4. A frame is accepted
+when the recipient ID equals the unit's own ID — **any** sender is accepted,
+no pairing needed — or when it is the identify broadcast (recipient
+`FF FF FF`, cmd 1), which makes the unit reply with its ID. That explains how
+the handheld talks to any unit. Relevant commands:
 
-This also means the panel heartbeat/alarm traffic (`§1`, types `0x20-0x26`) is
-only a **subset** of the radio protocol. There is a **service superset** — at
-least "start test cycle" and "read status codes" — that only the handheld
-exercises, with message types/bodies we have never captured. If the handheld
-can read S-codes / plant status over radio, then that data *is* reachable
-wirelessly (unlike the plain panel link, which never carries it) — relevant if
-the wired serial/modem path is impractical (e.g. outdoors at -30 °C).
+- cmd 3 → status: service flag, cycle, raw phase, phase timer.
+- cmd 4 sub 3 → start the test cycle (the radio route to the test cycle).
+- cmd 7 / cmd 8 → J4 inputs / output byte readback.
+- cmd 11 `FF` → reset all alarms (sets `0x014A`, handler `0xd5d5`, write at `0xd5fc`).
+- cmd `0x80` → pair: stores the sender as partner with no further checks.
 
-**Most useful next step:** an RF capture while the service tool is in use.
-`rtl_433 -R 321 -f 868.2M -Y minmax -F json:svc.json` running throughout would
-show the extra frames directly (same `EAEAEAEA`, same `mic=CRC`). Their `N`
-(byte[10]) and body would reveal the command opcodes and the status-readback
-format — the one piece static analysis structurally cannot recover. Replaying
-those commands (to poll status ourselves) would need a **TX-capable radio**
-(a cheap nRF905 module, or a TX SDR), not just the passive RTL-SDR.
+There is no authentication. None of these have been captured or sent on air
+yet. Checked against the dump: the jump-table entries for cmds 2, 11 and 25,
+cmd 2's 1–25 index check, and that cmds 17 and 22 both point at a bare
+`ais #33; rts` (`0xda50`, no action, no reply).
 
-*(An earlier version of this section speculated that `DAT_014a` might be this
-wireless device's trigger flag - partly right in spirit, wrong in specifics.
-`DAT_014a` is the styrskåp's own physical **Test button** 10-14s press,
-confirmed from the manual (§5). The radio-command trigger is the *separate*
-flag `DAT_013b`, above.)*
+This means the panel heartbeat/alarm traffic (`§1`) is only a **subset** of
+the radio protocol. The status data (cycle, phase) *is* reachable wirelessly
+via cmd 3, which needs a **TX-capable radio** (a cheap nRF905 module, or a TX
+SDR), not just the passive RTL-SDR.
 
-## 5. The physical Test button - CONFIRMED from the manual, partially traced in firmware
+*(Earlier versions of this section said nothing statically sets `DAT_013b`
+and concluded a radio frame must set it. That was wrong: the Test button
+handler does, at `0xa403` — see §5.)*
+
+## 5. The physical Test button - CONFIRMED from the manual, traced in firmware
 
 The styrskåp has a **green Test button**, wired (not wireless), documented in
 the Uponor installation manual with **three different hold durations**, each
@@ -172,34 +180,24 @@ doing something different:
 | 5–10 s | Start the **Test cycle** (EEPROM cycle 4, [eeprom-map.md](../eeprom-map.md)) | counts `1,2,3,4,S5,S6,S7…` while held, release at `S__5`; then `S400`, then the 8-step sequence |
 | 10–14 s | Reset the sludge-emptying reminder | counts seconds while held; release → `E000` |
 
-Two of the three are now tied to firmware, though neither trigger has a
-traceable static setter (same class of gap as the "computed store" cases
-elsewhere in this file):
+The hold logic is `FUN_a245` (thresholds from `0xa2c9`, actions in
+`FUN_a339`), decided on release:
 
-- **`DAT_014a`** (RAM `0x014a`) = the **10-14s long-press** trigger. `FUN_92fb`
-  (main loop) reads it and, if set, calls `FUN_93f8()` → `FUN_e372(1)` - the
-  full alarm-table clear + rebroadcast (the same routine that runs at
-  power-on). That's a broader reset than "just the sludge reminder," but
-  functionally identical in practice: if the sludge reminder is the only
-  active fault when the button is held (the manual's own use case), clearing
-  everything looks the same as clearing just that one.
-- The **5-10s "start Test cycle"** almost certainly runs through `FUN_ca4e`
-  (`DAT_0614 = param_1` - sets the active cycle number; its one known caller
-  passes an argument Ghidra's decompiler couldn't resolve statically) with
-  `param_1 = 4`. Not confirmed - `FUN_ca4e`'s only visible call site is deep
-  in the radio poll/ack processor (`FUN_caee`), which is an odd place for a
-  button handler and needs more tracing to confirm or rule out.
-- The **<5s "show status"** display behavior wasn't traced at all this pass -
-  it's presumably just reading the same `DAT_0613`/`DAT_0614` this file
-  already decodes and driving the display directly, without needing a radio
-  message.
+| Hold | Firmware action |
+| --- | --- |
+| < 5 s | show the S-code for 30 s |
+| 5–10 s | start the test cycle: `0xa403: sta $013b` (flag = 1), then `lda #4; jsr $ca4e` (cycle 4). In the post-boot window the same hold disables the radio instead ("PoFF") |
+| 10–15 s | zero the sludge counter, clear E051, notify the panel — works even when E051 isn't showing |
+| 15–20 s | reset the GSM settings (same as SMS `RS`) |
+| ≥ 20 s | cancel |
 
-`FindRefsInRange.java` on `0x014a`, `0x0150`, and `0x0614` all show either no
-setter or a setter whose caller passes an unresolved argument - the actual
-button-read GPIO pin and hold-timer logic is still not pinned down. The board
-has an onboard equivalent of this button too - pushbutton `S1`, **confirmed
-by continuity check** ([README.md](../../README.md)) to be wired in parallel
-with the `J16` "Test btn" 2-pin screw terminal (the external button's
-connector) - same net, one logical input. The remaining piece is finding
-which GPIO port bit reads the input and the timer/counter
-that measures the hold duration.
+**`DAT_014a` is not the Test button.** It is written non-zero in exactly one
+place, `0xd5fc`, in the radio cmd 11 handler when the parameter is `FF`; the
+main loop then runs `FUN_93f8()` → `FUN_e372(1)` (clear all alarms and
+rebroadcast). An earlier version of this section had `0x014A` as the 10–14 s
+press.
+
+The board has an onboard equivalent of this button too - pushbutton `S1`,
+**confirmed by continuity check** ([README.md](../../README.md)) to be wired
+in parallel with the `J16` "Test btn" 2-pin screw terminal (the external
+button's connector) - same net, one logical input.

@@ -7,8 +7,8 @@
  * see docs/nrf9e5-firmware.md — so all payload semantics live here.
  *
  * Call chain for one radio message:
- *   FUN_db22 (queue_radio_message)      -> snapshots the correlation words +
- *                                           direction, then
+ *   FUN_db22 (queue_radio_message)      -> snapshots the partner + own node IDs
+ *                                           and the ctrl byte, then
  *   FUN_ced9 (assemble_and_send_frame)  -> assembles the frame, then
  *   FUN_ce01 (serialize_frame_and_crc)  -> serialises bytes and runs the CRC, then
  *   FUN_e0cd/e08e (crc16_update_byte/crc16_fold_nibble) -> CRC-16/CCITT-FALSE
@@ -22,11 +22,11 @@
  */
 
 /* ---- FUN_db22 @ db22 : queue one radio message of a given "type" ---------- */
-/* aka queue_radio_message(type). Snapshots the four poll/ack correlation      */
-/* words (013e,0140,0109,010b) and the direction/marker bytes, stores the      */
-/* message TYPE in DAT_06be/06bf, then calls the assembler FUN_ced9. local_6 = */
-/* 0x40 is the direction marker (poll).                                        */
-void FUN_db22(undefined1 param_1)   /* param_1 = message type (0x20..0x26) */
+/* aka queue_radio_message(type, state). Snapshots the 4-byte partner ID       */
+/* (013e, the recipient) and own ID (0109, the sender), stores TYPE (from X)  */
+/* and STATE (from A) in DAT_06be/06bf, then calls the assembler FUN_ced9.    */
+/* local_6 = 0x40 is the message type (0x80 = ACK).                            */
+void FUN_db22(undefined1 param_1)   /* param_1 = state (A); type is in X */
 {
   char cVar1;
   undefined1 in_X;
@@ -40,16 +40,16 @@ void FUN_db22(undefined1 param_1)   /* param_1 = message type (0x20..0x26) */
   undefined1 *local_2;
 
   if (DAT_06e9 != '\0') {          /* radio enabled */
-    local_d = _DAT_0140;           /* correlation word 2 -> payload[5:7] */
-    local_f = _DAT_013e;           /* correlation word 1 -> payload[4]   */
-    local_9 = _DAT_010b;           /* correlation word 4 -> payload[8:10]*/
-    local_b = _DAT_0109;           /* correlation word 3 -> payload[7]   */
+    local_d = _DAT_0140;           /* partner ID lo 16 -> payload[5:7]  (recipient) */
+    local_f = _DAT_013e;           /* partner ID hi 16 -> payload[4]                */
+    local_9 = _DAT_010b;           /* own ID lo 16     -> payload[8:10] (sender)    */
+    local_b = _DAT_0109;           /* own ID hi 16     -> payload[7]                */
     uStack_7 = 0;
-    local_6 = 0x40;                /* direction marker: 0x40 = poll */
+    local_6 = 0x40;                /* ctrl type: 0x40 = message */
     local_4 = 2;
     local_2 = &DAT_06be;
-    DAT_06be = in_X;               /* type high byte */
-    DAT_06bf = param_1;            /* type          */
+    DAT_06be = in_X;               /* body[0] = type  */
+    DAT_06bf = param_1;            /* body[1] = state */
     FUN_ced9(&local_f);
     FUN_8fc4(0,0,0,0,0x1e,8);
     while( true ) {
@@ -93,10 +93,12 @@ void FUN_ced9(undefined2 param_1)
 /* seeded to 0xFFFF by FUN_e088 (aka crc16_seed).                                */
 /* cStack_3 = payload[0] = record[8] + record[0xb] + 12.                         */
 /* bStack_2 = payload[3] = ((record[8]&3)<<4) | record[9] | 0x0f  (record[9] is  */
-/*            the direction: 0x40 poll / 0x80 response).                         */
+/*            the type: 0x40 message / 0x80 ACK).                                */
 /* FUN_8ec7 = push one byte to the SCI/SPI FIFO; FUN_cec7/ceb8/cec1 = push byte  */
 /* AND fold it into the CRC. The two trailing FUN_8ec7(uStack_8/uStack_7) append */
-/* the 16-bit CRC, MSB first.                                                    */
+/* the 16-bit application CRC, MSB first, at payload[11+N..12+N] - INSIDE the    */
+/* 32-byte payload, separate from the nRF905's own hardware CRC. It covers       */
+/* payload[2 .. 10+N]; the length byte and 0xCC are pushed without CRC.          */
 void FUN_ce01(undefined2 param_1)
 {
   undefined1 in_stack_00000000;
@@ -114,17 +116,17 @@ void FUN_ce01(undefined2 param_1)
   uStack_5 = 0;
   FUN_e088(&uStack_8);                 /* CRC = 0xFFFF */
   cStack_3 = *(char *)(_uStack_1 + 8) + *(char *)(_uStack_1 + 0xb) + '\f';
-  FUN_8ec7();                          /* payload[1] = 0xCC (const, from caller) */
-  FUN_8ec7();                          /* payload[2] = 0x6E (const)              */
-  FUN_cec7(&uStack_8);                 /* payload[0] = cStack_3, +CRC            */
+  FUN_8ec7();                          /* payload[0] = cStack_3 (length), no CRC */
+  FUN_8ec7();                          /* payload[1] = 0xCC, no CRC              */
+  FUN_cec7(&uStack_8);                 /* payload[2] = 0x6E, +CRC                */
   bStack_2 = (*(byte *)(_uStack_1 + 8) & 3) << 4 | *(byte *)(_uStack_1 + 9) | 0xf;
   FUN_cec7(&uStack_8);                 /* payload[3] = bStack_2, +CRC            */
-  FUN_ceb8(local_b); FUN_cec1();       /* payload[4]  = word_013e lo            */
-  FUN_ceb8(local_b); FUN_cec1();       /* payload[5]                            */
-  FUN_ceb8(local_b); FUN_cec1();       /* payload[6]  = word_0140              */
-  FUN_ceb8(local_b); FUN_cec1();       /* payload[7]  = word_0109 lo           */
-  FUN_ceb8(local_b); FUN_cec1();       /* payload[8]                            */
-  FUN_ceb8(local_b); FUN_cec1();       /* payload[9]  = word_010b              */
+  FUN_ceb8(local_b); FUN_cec1();       /* payload[4..6] = partner ID (recipient) */
+  FUN_ceb8(local_b); FUN_cec1();
+  FUN_ceb8(local_b); FUN_cec1();
+  FUN_ceb8(local_b); FUN_cec1();       /* payload[7..9] = own ID (sender)        */
+  FUN_ceb8(local_b); FUN_cec1();
+  FUN_ceb8(local_b); FUN_cec1();
   if (*(char *)(_uStack_1 + 8) != '\0') { FUN_ceb8(local_b); FUN_cec1(); }
   FUN_ceb8(local_b); FUN_cec1();
   local_6 = 0;
@@ -133,8 +135,8 @@ void FUN_ce01(undefined2 param_1)
     FUN_ceb8(local_b); FUN_cec1();
     local_6 = local_6 + 1;
   }
-  FUN_8ec7(uStack_8);                  /* CRC hi (payload trailer byte 0) */
-  FUN_8ec7(uStack_7);                  /* CRC lo (payload trailer byte 1) */
+  FUN_8ec7(uStack_8);                  /* app CRC hi -> payload[11+N] */
+  FUN_8ec7(uStack_7);                  /* app CRC lo -> payload[12+N] */
   return;
 }
 

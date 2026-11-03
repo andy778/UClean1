@@ -23,19 +23,21 @@ Three independent findings in the dump identify U2 as a Telit modem host:
    `AT+IFC=0,0`, `AT#SELINT=`, `AT#BND=`, `AT+WMBS=`.
 2. **GSM-specific reply parsing**: `+CPIN: READY`, `CME ERROR`, `CMS ERROR` —
    the firmware consumes modem result codes, so it is the DTE, not a passive port.
-3. **SCI2 baud hard-coded to 9600**. At flash **`0xA40A`**:
+3. **Both SCIs use the same baud divisor**, SBR = 123:
 
    ```
-   mov #$20,SCI2BDL      ; 4E 20 41  -> SBR = 0x0020 = 32
+   0xfee8: mov #$7B,SCI1BDL   ; 6E 7B 19
+   0xff24: mov #$7B,SCI2BDL   ; 6E 7B 21
    ```
 
-   Baud = f_bus / (16 × SBR) = f_bus / 512. A **4.9152 MHz** bus clock (a classic
-   UART crystal) gives exactly **9600** — matching the `AT+IPR=9600` set on the
-   modem. So **SCI2 is the modem UART at 9600 8N1**.
+   Baud = f_bus / (16 × SBR). With a ≈18.9 MHz bus that is **9600** —
+   matching the `AT+IPR=9600` set on the modem and the bench test below. So
+   **SCI2 is the modem UART at 9600 8N1**. SBR = 10 (115 200) is used briefly
+   at `0x8fc0` while probing the modem.
 
-SCI1's baud divisor is loaded from the H:X register at runtime (no literal in the
-dump), consistent with SCI1 being the **local RS-232 service port** for the
-`CODE …` command interface below.
+   (An earlier version of this page cited `mov #$20,SCI2BDL` at `0xA40A`.
+   Those bytes, `cd ca 4e 20 41`, are really `jsr $ca4e; bra` in the Test
+   button handler.)
 
 ## The command / telemetry interface
 
@@ -98,7 +100,7 @@ PHONE3=+358000000000
 Notes:
 - Two EEPROM facts gate the reply, both now verified: U2 answers only a **stored
   sender** (`PHONE1-3 = +358000000000`) and only when **`REPLY=ON`** (the `0x01`
-  byte at EEPROM `0x3A98`). `HEARTBEAT=0` means U2 sends nothing on its own — you
+  byte at EEPROM `0x3AA2`). `HEARTBEAT=0` means U2 sends nothing on its own — you
   must poll it.
 - **`CYCLE COUNTER:2129` is board A's own counter**, not board B's display
   *satsräknare* (1258); the two boards keep independent counts.
