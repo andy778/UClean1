@@ -1,0 +1,56 @@
+name: CodeQL
+
+# Replaces GitHub's default code-scanning setup with a scoped workflow: only
+# runs when a change could plausibly touch scanned code, instead of on every
+# PR including docs-only ones. Languages are limited to what the repo
+# actually has (Python tools, GitHub Actions workflows) - no java-kotlin,
+# since the Ghidra *.java scripts are headless analysis tooling, not an
+# attack surface.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/**/*.py"
+      - ".github/workflows/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "tools/**/*.py"
+      - ".github/workflows/**"
+  schedule:
+    - cron: "30 1 * * 6" # weekly, matches scorecard-analysis.yml
+
+permissions: read-all
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, python]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@fbcef3fba75224ed6476919775448de80b23cb15 # v3.32.0
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@fbcef3fba75224ed6476919775448de80b23cb15 # v3.32.0
+        with:
+          category: "/language:${{ matrix.language }}"
