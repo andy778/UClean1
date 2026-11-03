@@ -161,6 +161,10 @@ The decoder lives on the `add-uponor-clean1` branch of
 [andy778/rtl_433](https://github.com/andy778/rtl_433), a fork of upstream
 [merbanan/rtl_433](https://github.com/merbanan/rtl_433) — not yet upstreamed.
 
+Build dependencies (Debian/Ubuntu-style packages; the fork doesn't change
+upstream's requirements): `build-essential cmake librtlsdr-dev libusb-1.0-0-dev
+pkg-config`.
+
 ```bash
 git clone https://github.com/andy778/rtl_433 && cd rtl_433
 git checkout add-uponor-clean1
@@ -169,5 +173,71 @@ mkdir build && cd build && cmake .. && make -j
 ```
 
 For live capture: tune ~150 kHz low (`-f 868.20M`) so the carrier clears the
-RTL-SDR DC spike, `-Y minmax` (needed for the weaker far-unit packet), MQTT via
-`-F "mqtt://localhost:1883,events=uclean1/events"`.
+RTL-SDR DC spike, `-Y minmax` (needed for the weaker far-unit packet).
+
+```bash
+./src/rtl_433 -f 868.20M -Y minmax -F json
+```
+
+## MQTT output
+
+`rtl_433`'s native `-F mqtt` output publishes every decoded event as JSON to a
+broker — no code changes needed, this is an upstream feature the fork
+inherits as-is:
+
+```bash
+./src/rtl_433 -f 868.20M -Y minmax \
+  -F "mqtt://localhost:1883,user=USERNAME,pass=PASSWORD,retain=0,events=uclean1/events"
+```
+
+- Default broker is `localhost:1883`; user/pass can also come from the
+  `MQTT_USERNAME`/`MQTT_PASSWORD` env vars instead of the command line.
+- `events=<topic>` (shown above) overrides the default event topic
+  (`rtl_433/HOSTNAME/events`); drop it to use the default, or use
+  `devices=uclean1[/id]` instead for one topic per device rather than one
+  shared events stream.
+- `mqtts://` plus `tls_cert=`/`tls_key=`/`tls_ca_cert=` enables TLS.
+- The payload is this decoder's fields as JSON — `model`, `id`, `msg_type`,
+  `msg_state` (see "What's still open" above for the current field names and
+  known alarm-type/state mapping) — not a home-brewed schema.
+
+**This MQTT stream is unauthenticated to anyone who can reach the broker** —
+anyone able to publish/subscribe can spoof or read plant-alarm state, so keep
+the broker on a trusted network/VLAN, not exposed to the internet.
+
+## Home Assistant via MQTT discovery
+
+Upstream rtl_433 ships `examples/rtl_433_mqtt_hass.py`, a small bridge that
+subscribes to the rtl_433 events topic and publishes [Home Assistant MQTT
+discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
+config messages, so decoded devices show up as HA entities automatically
+instead of needing hand-written `configuration.yaml` sensors. **The fork
+carries its own copy of this file, not byte-identical to upstream** — notably
+its `mappings` dict (which maps known field names to HA `device_class`/icon)
+doesn't include `leaking`/`reading`/`daily_reading`, and `-I/--ids` filters by
+`int` instead of `str`. Neither difference affects a plain run against this
+decoder; check the fork's copy if you rely on either.
+
+```bash
+python3 examples/rtl_433_mqtt_hass.py \
+  -H localhost -p 1883 -u USERNAME -P PASSWORD \
+  -R "uclean1/events" -D homeassistant
+```
+
+- `-R`/`--rtl-topic` must match whatever topic rtl_433's `-F mqtt` used above
+  (default `rtl_433/+/events`) — if you changed `events=` on the rtl_433 side,
+  pass the same value here (with the `+` wildcard if multiple hosts publish).
+- `-D`/`--discovery-prefix` (default `homeassistant`) must match the
+  `discovery` prefix HA's MQTT integration expects (the HA default, so usually
+  leave it).
+- `-i`/`--interval` controls how often configs are republished (default 600 s)
+  and `-r`/`--retain` retains them so HA sees the entities again after an HA
+  restart without rtl_433 needing to re-publish first.
+- This decoder's fields (`msg_type`, `msg_state`, etc.) aren't in the script's
+  `mappings` dict, so expect plain generic sensor entities rather than ones
+  with alarm-specific icons/device classes — map them in your own copy of the
+  `mappings` dict if you want nicer HA entities, rather than patching the
+  decoder itself.
+- Run both processes (`rtl_433 -F mqtt://...` and `rtl_433_mqtt_hass.py`) as
+  long-running services (systemd units, or alongside HA's own add-ons) so
+  discovery configs get republished and HA keeps seeing fresh state.
