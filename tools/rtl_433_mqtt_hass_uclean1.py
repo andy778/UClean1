@@ -939,7 +939,7 @@ mappings = {
 # Use secret_knock to trigger device automations for Honeywell ActivLink
 # doorbells. We have this outside of mappings as we need to configure two
 # different configuration topics.
-secret_knock_mappings = [
+activlink_knock_mappings = [
 
     {
         "device_type": "device_automation",
@@ -1122,7 +1122,7 @@ def bridge_event_to_hass(mqttc, topic_prefix, data):
                 skipped_keys.append(key)
 
     if "secret_knock" in data.keys():
-        for m in secret_knock_mappings:
+        for m in activlink_knock_mappings:
             topic = "/".join([base_topic, "secret_knock"])
             if publish_config(mqttc, topic, model, device_id, m, "secret_knock"):
                 published_keys.append("secret_knock")
