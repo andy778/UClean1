@@ -35,7 +35,7 @@ same command line (`rtl_433 -f 868.05M -s 1000k -Y minmax`, live, 2026-11-03).
 | Dongle | Tuner | SNR (heartbeat / ACK) | FSK tones seen | Notes |
 | --- | --- | --- | --- | --- |
 | [RTL-SDR Blog V3](https://www.rtl-sdr.com/buy-rtl-sdr-dvb-t-dongles/) | R820T2 (reported as R820T), 1 ppm TCXO | 26–28 dB / 26–30 dB | ~868.13 / ~868.22 MHz | 6 of 6 exchanges decoded over two runs |
-| Generic DVB-T USB TV stick (RTL2832U, bought from AliExpress years ago, no TCXO) | R820T | ~21 dB / ~23 dB | ~868.07–868.10 / ~868.17 MHz | 1 of 1 exchange in a 75 s test |
+| Generic DVB-T USB TV stick (RTL2832U, bought from AliExpress years ago, no TCXO; looks like [this one](https://www.amazon.co.uk/dp/B0D9BVB2S2)) | R820T | ~21 dB / ~23 dB | ~868.07–868.10 / ~868.17 MHz | 1 of 1 exchange in a 75 s test |
 
 - The tone pair the V3 sees is centred near 868.175 MHz, about 25 kHz below
   868.2 MHz. With a 1 ppm TCXO in the dongle, that offset most likely comes
