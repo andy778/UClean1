@@ -249,3 +249,28 @@ python3 tools/rtl_433_mqtt_hass_uclean1.py \
 - Run both processes (`rtl_433 -F mqtt://...` and this script) as
   long-running services (systemd units, or alongside HA's own add-ons) so
   discovery configs get republished and HA keeps seeing fresh state.
+
+## For testers
+
+Everything above should get you from a clean clone to alarms in Home
+Assistant. If you're trying this against a real unit, here's what's actually
+useful to report back — see "What's still open" above for the full picture:
+
+- **A `state=1` frame, any alarm type.** Every capture so far is `state=0`
+  (all-clear) — the state byte's meaning is derived from firmware, never
+  observed on air. The "Recipe: capturing a `state=1` frame" above describes
+  one way to force one (disconnecting an actuator before power-up); a real
+  fault triggering it naturally is just as valuable, maybe more.
+- **A `0x26` (`gsm_fault`) frame**, of any state. Not seen on air at all yet.
+- Whether the decoder still decodes correctly on a unit other than this
+  project's board B — different firmware/radio revisions could, in
+  principle, behave differently (see the "Two boards" note in
+  [`CLAUDE.md`](../CLAUDE.md) for why that's worth checking explicitly).
+- If you hit a decode failure, a raw `.cu8` capture (see "Capture" above) is
+  far more useful than a description — it lets anyone reproduce the exact
+  bits that failed to decode, rather than guessing from a log line.
+- Open an issue against [this repo](https://github.com/andy778/UClean1/issues)
+  (protocol/decoding questions) or
+  [the fork](https://github.com/andy778/rtl_433/issues) (build/decoder-code
+  issues specific to `add-uponor-clean1-upstream`) — whichever fits what you
+  hit.
