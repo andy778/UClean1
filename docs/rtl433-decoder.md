@@ -24,8 +24,8 @@ rtl_sdr -f 868.20M -s 1024000 -g 49 -n $((1024000*300)) capture.cu8
   RTL-SDR's DC self-mixing spike; centered on it, rtl_433 sees nothing.
 - `-g 49`: high gain, low gain sits near the noise floor.
 - Cadence: one event every ~62 s, a two-packet exchange (poll + response).
-- Boot burst (all 5 alarm types): `rtl_433 -R 321 -f 868.2M -Y minmax -F json:boot.json`,
-  then power-cycle the outer unit. `FUN_e372` blasts all states on reconnect.
+- Boot burst (all 5 alarm types, as clear): `rtl_433 -R 321 -f 868.2M -Y minmax -F json:boot.json`,
+  then power-cycle the outer unit. `FUN_e372` sends all five on reconnect.
 
 Flex decoder, before the C decoder existed:
 
@@ -53,8 +53,8 @@ config-register layout in [register-map.md](ghidra/register-map.md):
 
 | Field | Value | Config byte(s) | Firmware detail |
 | --- | --- | --- | --- |
-| Carrier | 868.2 MHz (channel 117) | `CR0`=`0x75`, `CR1`=`0x06` | 9-bit `CH_NO`=`0x075`=117, `HFREQ_PLL`=1: `fRF = (422.4 + 117/10) × 2 = 868.2 MHz` — matches the measured carrier exactly. `PA_PWR`=`01` = −2 dBm output |
-| Line rate | 100 kbps, Manchester-coded on air | — | capture only — neither firmware does Manchester in software, it's a PHY effect |
+| Carrier | 868.2 MHz (channel 117) | `CR0`=`0x75`, `CR1`=`0x06` | 9-bit `CH_NO`=`0x075`=117, `HFREQ_PLL`=1: `fRF = (422.4 + 117/10) × 2 = 868.2 MHz` — matches the measured carrier exactly. `PA_PWR`=`01` = −2 dBm in this write, but U2 overrides it to `11` = **+10 dBm** at boot (control byte `0x73` + `03`, see the spec §2) |
+| Line rate | 50 kbps data, Manchester-coded on air = 100 kchip/s (10 µs half-bit) | — | neither firmware does Manchester in software, it's a PHY effect |
 | Address | `EA EA EA EA`, 4 bytes | `CR2`=`0x44` (width); `CR5–8` + `W_TX_ADDRESS` = `EA EA EA EA` | `RX_AFW`=`TX_AFW`=4; the same 4 bytes are written twice — once as `RX_ADDRESS` (RX match), once as `TX_ADDRESS` (TX prefix) — confirmed on-air |
 | Payload | 32 bytes | `CR3`=`0x20`, `CR4`=`0x20` | `RX_PW`=`TX_PW`=32 |
 | CRC | CRC-16, poly `0x1021`, init `0xFFFF`, over address+payload | `CR9`=`0xD4` | `CRC_MODE`=1, `CRC_EN`=1 (`XOF`=`010` = 16 MHz crystal); **verified live** by `tools/rtl433/probe_capture.py` and in the decoder |
@@ -70,40 +70,50 @@ canonical source, derived from the MC9S08 serializer `FUN_ce01`). In short, the
 32-byte payload is a **messaging protocol**, not telemetry:
 
 ```
-[0]=12+N  [1]=CC  [2]=6E  [3]=flags|dir  [4:10]=two node-IDs  [10]=N  [11..]=body  [..]=stale
+[0]=12+N  [1]=CC  [2]=6E  [3]=ctrl  [4:7]=recipient  [7:10]=sender  [10]=N  [11..10+N]=body  [11+N..12+N]=app CRC  [..]=stale
 ```
 
-- **Bytes `[4:10]` are two 3-byte node IDs**, a poll/ack cookie — each side
-  sends "my ID" and echoes "your ID" (`dir` byte `0x40` poll / `0x80` response).
-  Stable per device across captures days apart: outer unit `80 0D 6E`,
-  infopanel `C0 23 4B`.
+- **Bytes `[4:7]` are the recipient's and `[7:10]` the sender's 3-byte node
+  ID** (ctrl byte `0x4F` message / `0x8F` ACK; an ACK swaps the two). Stable
+  per device across captures days apart: outer unit (board B) `C0 23 4B`,
+  indoor panel `80 0D 6E`. An earlier version of this page had the two
+  fields and the two devices swapped.
 - **Byte `[10]` = `N`, the message-body length**; `[11 .. 10+N]` = the body.
   `N=0` ACK, `N=1` heartbeat (`0x24`), `N=2` alarm (`[type, state]`).
-- **Bytes past `10+N` are stale buffer**, not data — they vary run-to-run for
-  identical logical frames (CRC still passes; U2 CRCs whatever it sends).
+- **`[11+N .. 12+N]` is an application CRC-16/CCITT-FALSE** over
+  `[2 .. 10+N]`, computed by U2. It matches every captured frame.
+- **Bytes past `12+N` are stale**, not data — U2 doesn't send them, and they
+  vary run-to-run for identical logical frames.
 
 **Confirmed absent from the payload:** `CYCLE COUNTER` (RAM `0x0607`) and the
 `PLANT STATUS` phase (RAM `0x0613`/`0x0614`) — neither is radio'd out. The panel
-has no numeric display, so the radio only carries what the panel can *show*: the
-5 alarm symbols + status. Get the counter/phase via the serial path instead:
-[docs/u2-serial-protocol.md](u2-serial-protocol.md).
+has no numeric display, so the normal panel traffic only carries the 5 alarm
+types. Get the counter/phase via the serial path instead:
+[docs/u2-serial-protocol.md](u2-serial-protocol.md). (The firmware also has
+radio commands that return them — cmd 3 status, cmd 12 counters — recovered
+statically in [#113](https://github.com/andy778/UClean1/issues/113) but never
+sent; that needs a TX-capable radio.)
 
 ## What's still open
 
-- 4 of 5 alarm types confirmed on air (`0x20`/`0x21`/`0x22`/`0x23`, boot burst
-  2026-07-06, all `state=0`). Only `0x26` (device_fault) still needs catching —
-  it was dropped in that burst. Recipe below.
+- 4 of 5 alarm types seen on air (`0x20`/`0x21`/`0x22`/`0x23`, boot burst
+  2026-07-06, all `state=0`). `0x26` (GSM fault) has not been seen.
 - Every capture so far is `state=0` (all-clear). No `state=1` frame has ever
   been recorded, so the state byte's meaning is firmware-derived, not observed.
-  The same recipe fixes both gaps at once.
+  The recipe below forces one.
+- The decoder in the fork still uses the old field order and type names
+  (`id` = the panel's ID, `0x20` = "status", …). The patch in
+  [#113](https://github.com/andy778/UClean1/issues/113) fixes that and adds
+  the application CRC check; it changes the `id` Home Assistant sees.
 
-### Forcing a `device_fault` (`0x26`, `state=1`) — deliberate, not by waiting
+### Forcing a `device_fault` (`0x22`, `state=1`) — deliberate, not by waiting
 
 Rather than waiting for a real failure or hoping for a lucky boot burst, the
 actuator self-test can be made to fail on demand. `FUN_a138` walks all 7
 output channels and flags any whose readback bit never clears; `FUN_c9e1`
-turns that into `E040`–`E045`, which maps to radio type `0x26` (see
-[eeprom-map.md](eeprom-map.md)). So an open-circuit on one channel is exactly
+turns that into `E040`–`E045`, which maps to radio type `0x22` (see
+[eeprom-map.md](eeprom-map.md)). It runs at every phase transition, including
+the first one after power-up. So an open-circuit on one channel is exactly
 the condition it looks for:
 
 1. **Power off** the outer unit at the mains.
@@ -111,8 +121,9 @@ the condition it looks for:
    `MV5` (aeration, `E045`). One channel only, so the resulting code is
    unambiguous.
 3. Start the capture *first*: `rtl_433 -R 321 -f 868.2M -Y minmax -F json:fault.json`
-4. Power on. The self-test runs during startup; the fault should broadcast as
-   `msg_type=0x26`, `msg_state=1`.
+4. Power on. The self-test runs at the first phase transition; the fault
+   should broadcast as `msg_type=0x22`, `msg_state=1` (the current decoder
+   labels it `high_water`).
 5. Power off, reconnect the actuator, power on, and confirm the panel returns
    to `E000` / all-clear (which should also yield a `state=0` frame — the
    clear transition, also never yet captured).

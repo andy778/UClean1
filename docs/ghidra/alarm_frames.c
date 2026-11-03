@@ -1,22 +1,26 @@
 /*
  * MC9S08GT (U2) — alarm/status TX, Ghidra decompile (raw, lightly annotated).
  *
- * The radio receiver is the indoor infopanel: 5 alarm symbols + one OK button
- * + a green/red LED. Each radio message carries a TYPE byte and a boolean state.
- * There are exactly 5 message types -> the 5 panel symbols:
+ * The radio receiver is the indoor infopanel. Each radio message carries a
+ * TYPE byte and a boolean state. There are exactly 5 alarm types. The type is
+ * passed to FUN_db22 in X, which Ghidra drops below; read the `ldx #type`
+ * before each `jsr $db22` in the disassembly:
  *
- *   type  RAM source(s)                 alarm code(s)     panel meaning
- *   0x20  DAT_0757                       0x02 (E011)       status / OK LED
- *   0x21  DAT_06ff                       0x15 (E021)       chemical level low
- *   0x22  DAT_0707/070f/075b + array     0x1F/0x20 (E03x)  high water
- *   0x23  DAT_074f                       0x33 (E051)       sludge-empty reminder
- *   0x26  DAT_0747 + array 0x0717..      0x2F,0x28-0x2D    device fault "!"
+ *   type  RAM source(s)                      alarm code(s)          meaning
+ *   0x20  DAT_06ff                           0x15 (E021)            chemical level low
+ *   0x21  DAT_0707/070f/075b (OR)            0x1F/0x20/0x21 (E03x)  high water
+ *   0x22  array 0x0717+8*i + DAT_0747 (OR)   0x28-0x2D, 0x2F        device fault
+ *   0x23  DAT_074f                           0x33 (E051)            sludge-empty reminder
+ *   0x26  DAT_0757                           0x0C (E012)            GSM fault
+ *
+ * (An earlier version of this table had the types shifted; see
+ * docs/rtl433-implementation-spec.md §4.)
  *
  * FUN_e372 (aka alarm_reset_broadcast_all) = reset/all-clear: sends all 5
- *   types with state 0. Runs at boot AND on the styrskåp's own green Test
- *   button's 10-14s long-press (see docs/ghidra/codes.md §5) - same routine.
- * FUN_e427 (aka alarm_broadcast_current_state) = periodic: sends each type
- *   with its live boolean.
+ *   types with state 0. Runs at boot AND after radio cmd 11 `FF` (reset all
+ *   alarms, flag 0x014A; see docs/ghidra/codes.md §5) - same routine.
+ * FUN_e427 (aka alarm_broadcast_current_state) = resync: sends each type
+ *   with its live boolean; runs when a range test ends.
  * FUN_e0e5 (aka alarm_change_detector) = event-driven: sends a type ONLY when
  *   its state changed (edge).
  *
@@ -27,7 +31,7 @@
 
 /* ---- FUN_e372 @ e372 : reset -> emit all 5 symbols as "clear" -------------- */
 /* aka alarm_reset_broadcast_all(param_1). param_1 distinguishes boot (0) from */
-/* the Test-button long-press (1) - only affects one EEPROM-error check below, */
+/* radio cmd 11 `FF` (1) - only affects one EEPROM-error check below,         */
 /* the alarm-table clear + 5-message broadcast is identical either way.       */
 void FUN_e372(char param_1)
 {
@@ -69,15 +73,15 @@ void FUN_e372(char param_1)
   if (_DAT_0134 == 0) { FUN_a334(); FUN_a1d3(); }
   DAT_060f = 0; DAT_0610 = 0; DAT_0611 = 0; DAT_0612 = 0;
 
-  FUN_db22(0x20);                                        /* status / OK LED     */
-  FUN_db22(0,CONCAT11(extraout_HI,   0x21));             /* chemical low        */
-  FUN_db22(0,CONCAT11(extraout_HI_00,0x22));             /* high water          */
+  FUN_db22(0x20);                                        /* chemical low        */
+  FUN_db22(0,CONCAT11(extraout_HI,   0x21));             /* high water          */
+  FUN_db22(0,CONCAT11(extraout_HI_00,0x22));             /* device fault        */
   FUN_db22(0,CONCAT11(extraout_HI_01,0x23));             /* sludge reminder     */
-  FUN_db22(0,CONCAT11(extraout_HI_02,0x26));             /* device fault "!"    */
+  FUN_db22(0,CONCAT11(extraout_HI_02,0x26));             /* GSM fault           */
   return;
 }
 
-/* ---- FUN_e427 @ e427 : periodic -> emit all 5 with their live booleans ----- */
+/* ---- FUN_e427 @ e427 : resync -> emit all 5 with their live booleans ------- */
 /* aka alarm_broadcast_current_state. Calls FUN_de1b (aka                    */
 /* send_heartbeat_poll_and_wait, in mc9s08gt32_full.c) first - only proceeds  */
 /* if that poll/ack round-trip succeeded.                                    */
@@ -94,12 +98,12 @@ void FUN_e427(void)
   cVar2 = FUN_de1b((char)((ushort)_DAT_013e >> 8),(char)_DAT_013e,
                    (char)((ushort)_DAT_0140 >> 8),(char)_DAT_0140);
   if (cVar2 != '\0') {
-    FUN_db22(DAT_0757 != '\0');                          /* 0x20 status         */
-    FUN_db22(DAT_06ff != '\0');                          /* 0x21 chemical low   */
+    FUN_db22(DAT_0757 != '\0');                          /* 0x26 GSM fault      */
+    FUN_db22(DAT_06ff != '\0');                          /* 0x20 chemical low   */
     if (DAT_0707 != '\0') cStack_2 = '\x01';
     if (DAT_070f != '\0') cStack_2 = '\x01';
     if ((DAT_075b == '\0') && (cStack_2 == '\0')) uVar3 = 0; else uVar3 = 1;
-    FUN_db22(uVar3);                                     /* 0x22 high water     */
+    FUN_db22(uVar3);                                     /* 0x21 high water     */
     FUN_db22(DAT_074f != '\0');                          /* 0x23 sludge remind  */
     bStack_1 = 0;                                        /* scan MV/compressor  */
     do {
@@ -107,7 +111,7 @@ void FUN_e427(void)
       bStack_1 = bStack_1 + 1;
     } while (bStack_1 < 6);
     if ((DAT_0747 != '\0') || (bVar1)) uVar3 = 1; else uVar3 = 0;
-    FUN_db22(uVar3,CONCAT11((char)((ushort)&cStack_2 >> 8),0x22));   /* 0x26 fault */
+    FUN_db22(uVar3,CONCAT11((char)((ushort)&cStack_2 >> 8),0x22));   /* 0x22 fault */
   }
   return;
 }
@@ -141,10 +145,10 @@ void FUN_e0e5(char param_1,char param_2)
     bVar7 = (((DAT_0141 == '\0' && DAT_0140 == '\0') && DAT_013f == '\0') && DAT_013e == '\0') << 1;
     if (((DAT_0141 != '\0' || DAT_0140 != '\0') || DAT_013f != '\0') || DAT_013e != '\0') {
       if (DAT_013d != '\0') {
-        bVar7 = (DAT_0758 == DAT_0757) << 1;                     /* 0x20 status  */
+        bVar7 = (DAT_0758 == DAT_0757) << 1;                     /* 0x26 GSM     */
         if ((DAT_0758 != DAT_0757) && (FUN_e26f(), (bVar7 >> 1 & 1) != 1)) {
           DAT_0758 = DAT_0757; FUN_db22(DAT_0757 != '\0'); }
-        bVar7 = (DAT_0700 == DAT_06ff) << 1;                     /* 0x21 chem    */
+        bVar7 = (DAT_0700 == DAT_06ff) << 1;                     /* 0x20 chem    */
         if ((DAT_0700 != DAT_06ff) && (FUN_e26f(), (bVar7 >> 1 & 1) != 1)) {
           DAT_0700 = DAT_06ff; FUN_db22(DAT_06ff != '\0'); }
         bVar7 = 2;
@@ -161,7 +165,7 @@ void FUN_e0e5(char param_1,char param_2)
         bVar7 = (DAT_075c == DAT_075b) << 1;
         if ((DAT_075c != DAT_075b) && (FUN_e26f(), (bVar7 >> 1 & 1) != 1)) DAT_075c = DAT_075b;
         if (DAT_075b != '\0') param_2 = '\x01';
-        bVar7 = (DAT_0149 == param_2) << 1;                      /* 0x22 high water */
+        bVar7 = (DAT_0149 == param_2) << 1;                      /* 0x21 high water */
         if ((DAT_0149 != param_2) && (FUN_e26f(), (bVar7 >> 1 & 1) != 1)) {
           DAT_0149 = param_2; FUN_db22(param_2 != '\0'); }
         bVar7 = (DAT_0750 == DAT_074f) << 1;                     /* 0x23 sludge  */
@@ -180,7 +184,7 @@ void FUN_e0e5(char param_1,char param_2)
       sVar4 = FUN_e280();
       if (*(char *)(sVar4 + 0x717) != '\0') param_1 = '\x01';
       unaff_retaddr_00 = unaff_retaddr_00 + 1;
-      if (5 < unaff_retaddr_00) {                                /* 0x26 device fault */
+      if (5 < unaff_retaddr_00) {                                /* 0x22 device fault */
         if (DAT_0748 != DAT_0747) DAT_0748 = DAT_0747;
         if (DAT_0747 != '\0') param_1 = '\x01';
         bVar7 = (DAT_0148 == param_1) << 1;

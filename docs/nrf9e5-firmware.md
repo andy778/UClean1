@@ -1,9 +1,15 @@
 # nRF9E5 firmware (Path C) — recovered from the U2 flash
 
-**Result:** the nRF9E5's 8051 firmware — Manchester coding, frame header, payload
-packing, and the nRF905 `W_CONFIG` (channel/address/CRC) — is **embedded in the
-U2 flash we already have**, served to the nRF9E5 by U2 at power-on. Extracted to
+**Result:** the nRF9E5's 8051 firmware — the UART-to-radio relay and the
+nRF905 `W_CONFIG` (channel/address/CRC) — is **embedded in the U2 flash we
+already have**, served to the nRF9E5 by U2 at power-on. (Manchester coding is
+done by the nRF905 hardware, not by this firmware — see below.) Extracted to
 [`dumps/u1-nrf9e5-8051.bin`](../dumps/u1-nrf9e5-8051.bin) (1648 bytes).
+
+U2's SPI handler serves `0x067A` (1658) bytes from flash `0x80BB`
+(`0xbdc9: cphx #$067a`), so the extracted file is missing the last 9 bytes,
+`c0 01 00 00 00 00 00 4b b0` at flash `0x872B` — the reply the 8051 sends for
+control byte `0xC0`.
 
 There is no external boot EEPROM on this board.
 

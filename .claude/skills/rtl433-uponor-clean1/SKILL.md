@@ -14,9 +14,9 @@ can't cite, and don't remove a caveat because it's inconvenient.
 
 Read **[`docs/rtl433-implementation-spec.md`](../../docs/rtl433-implementation-spec.md)**
 first. It's self-contained — physical layer, frame format, byte-exact payload
-map, test vectors, and the one recipe for the still-uncaptured `device_fault`
-alarm type. Don't re-derive the protocol from the narrative research docs
-(`docs/ghidra/`, `docs/radio-capture-log.md`, etc.) — those are provenance for
+map, test vectors, and the recipe for forcing a never-yet-captured `state=1`
+frame. Don't re-derive the protocol from the narrative research docs
+(`docs/ghidra/`, `docs/rtl433-decoder.md`, etc.) — those are provenance for
 the spec, not a second source of truth. If you find the spec and a research
 doc disagree, that's a bug in one of them — flag it, don't silently pick one.
 
@@ -25,8 +25,8 @@ doc disagree, that's a bug in one of them — flag it, don't silently pick one.
 The decoder is **not in this repo**. It's in a fork:
 [andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c),
 a fork of upstream [merbanan/rtl_433](https://github.com/merbanan/rtl_433) —
-not yet upstreamed (spec §9 covers why: one alarm type still unconfirmed on
-air). Clone/work in that repo for decoder changes; this repo (`UClean1`) is
+not yet upstreamed (no `state=1` frame or `0x26` frame has been seen on air
+yet, and the corrections in spec §3–§4 aren't in the decoder yet). Clone/work in that repo for decoder changes; this repo (`UClean1`) is
 where the protocol research and spec live.
 
 ## Workflow for a decoder change
@@ -35,8 +35,9 @@ where the protocol research and spec live.
    accumulated, CONTRIBUTING.md-compliant decoder state.
 2. **Cross-check against the spec** before writing code — most bugs in this
    decoder's history came from not doing this (e.g. an early version reported
-   the constant frame address as `id` instead of the per-device `node_src`;
-   see spec §5).
+   the constant frame address as `id` instead of the per-device `node_src`,
+   and the decoder still has the node-ID fields and type names from before
+   the spec §3–§4 corrections; see spec §5 and §8).
 3. **Build and verify against real captures**, not just a clean compile:
    ```bash
    cd build && make -j4 rtl_433
@@ -65,15 +66,21 @@ where the protocol research and spec live.
 
 ## Common pitfalls (all previously hit in this project)
 
-- **`id` must be `node_src`, never the frame address.** The address
-  (`EA EA EA EA`) is a firmware-hardcoded constant, identical on every unit
-  ever shipped — using it as `id` collides all devices into one.
-- **Stale tail bytes (`payload[11+N..31]`) are not data.** They vary
-  run-to-run for identical logical messages. Never decode them, never use
-  them as a freshness/nonce signal.
-- **Validate `payload[0] == 12 + N`, not just the CRC.** CRC passing only
-  proves the bytes weren't corrupted in transit — it says nothing about
-  whether your address-sync landed on the right offset.
+- **`id` must be `node_src` (`payload[7..9]`), never the frame address.**
+  `payload[4..6]` is the recipient. The address (`EA EA EA EA`) is a
+  firmware-hardcoded constant, identical on every unit ever shipped — using
+  it as `id` collides all devices into one.
+- **`payload[11+N..12+N]` is an application CRC, not stale data.** Only the
+  bytes after it (`payload[13+N..31]`) are stale. They vary run-to-run for
+  identical logical messages. Never decode them, never use them as a
+  freshness/nonce signal.
+- **Validate `payload[0] == 12 + N` and the application CRC, not just the
+  nRF905 CRC.** The nRF905 CRC passing only proves the bytes weren't
+  corrupted in transit — it says nothing about whether your address-sync
+  landed on the right offset.
+- **Type names come from the firmware, not from the boot burst.** An
+  all-clear burst shows which type numbers exist, not what they mean; that
+  is how the names got shifted once (spec §4).
 - **Don't implement software Manchester encoding for TX.** The on-air
   Manchester coding is the nRF905 hardware's own behavior; the firmware
   writes plain bytes. A TX implementation using a real nRF905 chip and the
