@@ -101,10 +101,11 @@ sent; that needs a TX-capable radio.)
 - Every capture so far is `state=0` (all-clear). No `state=1` frame has ever
   been recorded, so the state byte's meaning is firmware-derived, not observed.
   The recipe below forces one.
-- The decoder in the fork still uses the old field order and type names
-  (`id` = the panel's ID, `0x20` = "status", …). The patch in
-  [#113](https://github.com/andy778/UClean1/issues/113) fixes that and adds
-  the application CRC check; it changes the `id` Home Assistant sees.
+- The decoder in the fork uses the corrected field order and type names and
+  checks the application CRC since
+  [andy778/rtl_433#5](https://github.com/andy778/rtl_433/pull/5). Older
+  builds reported the panel's ID as `id`, so updating changes the `id` Home
+  Assistant sees for the outer unit.
 
 ### Forcing a `device_fault` (`0x22`, `state=1`) — deliberate, not by waiting
 
