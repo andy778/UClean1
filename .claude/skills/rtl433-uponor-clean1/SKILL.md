@@ -26,8 +26,10 @@ The decoder is **not in this repo**. It's in a fork:
 [andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c),
 a fork of upstream [merbanan/rtl_433](https://github.com/merbanan/rtl_433) —
 not yet upstreamed (no `state=1` frame or `0x26` frame has been seen on air
-yet, and the corrections in spec §3–§4 aren't in the decoder yet). Clone/work in that repo for decoder changes; this repo (`UClean1`) is
-where the protocol research and spec live.
+yet). The spec §3–§4 corrections are in the decoder since
+[andy778/rtl_433#5](https://github.com/andy778/rtl_433/pull/5). Clone/work in
+that repo for decoder changes; this repo (`UClean1`) is where the protocol
+research and spec live.
 
 ## Workflow for a decoder change
 
@@ -36,8 +38,8 @@ where the protocol research and spec live.
 2. **Cross-check against the spec** before writing code — most bugs in this
    decoder's history came from not doing this (e.g. an early version reported
    the constant frame address as `id` instead of the per-device `node_src`,
-   and the decoder still has the node-ID fields and type names from before
-   the spec §3–§4 corrections; see spec §5 and §8).
+   and a later one had the node-ID fields swapped and the type names shifted
+   until the spec §3–§4 corrections; see spec §5 and §8).
 3. **Build and verify against real captures**, not just a clean compile:
    ```bash
    cd build && make -j4 rtl_433

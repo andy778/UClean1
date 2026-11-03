@@ -232,19 +232,23 @@ Full recipe with rationale: [`rtl433-decoder.md`](rtl433-decoder.md).
 
 A C decoder for [rtl_433](https://github.com/merbanan/rtl_433) exists:
 [andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c).
-It implements address-sync via `bitbuffer_search`, the nRF905 CRC gate and
-the `hdr_len == 12+N` validation, and is the easiest way to see a complete,
-working parser.
+It implements address-sync via `bitbuffer_search`, all three validation gates
+from §3 (nRF905 CRC, `hdr_len == 12+N`, application CRC), `id` = `node_src`
+with the recipient as a separate `node_dst` field, the §4 type names, and a
+`payload` field trimmed at the application CRC. It is the easiest way to see
+a complete, working parser.
 
-**It predates the corrections in §3–§4** (node-ID order, application CRC,
-type names), so it currently reports the panel's ID as `id` and the old type
-names. A patch that fixes all three is in
-[#113](https://github.com/andy778/UClean1/issues/113) (v2, tested on
-synthetic captures only). Updating the decoder changes the `id` that Home
-Assistant/MQTT sees for the outer unit. Use `FSK_PULSE_MANCHESTER_ZEROBIT`
-at 10 µs bit time if implementing against rtl_433's demodulator; see the
-decoder's own file header for the flex-decoder equivalent (no C code needed)
-and capture recipes.
+The §3–§4 corrections reached the decoder in
+[andy778/rtl_433#5](https://github.com/andy778/rtl_433/pull/5). Earlier
+versions reported the panel's ID as `id` for the outer unit's frames and used
+the shifted type names, so a Home Assistant/MQTT setup built on an older
+build sees the outer unit under a new `id` (`c0234b` on the live unit) after
+updating. That change was verified against the §6 test vectors, not yet
+against a fresh live capture.
+
+Use `FSK_PULSE_MANCHESTER_ZEROBIT` at 10 µs bit time if implementing against
+rtl_433's demodulator; see the decoder's own file header for the flex-decoder
+equivalent (no C code needed) and capture recipes.
 
 ## 9. Known gaps (don't treat as spec — these are open questions, not rules)
 
