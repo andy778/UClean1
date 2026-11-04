@@ -118,8 +118,18 @@ sent; that needs a TX-capable radio.)
 
 ## What's still open
 
-- 4 of 5 alarm types seen on air (`0x20`/`0x21`/`0x22`/`0x23`, boot burst
-  2026-07-06, all `state=0`). `0x26` (GSM fault) has not been seen.
+- **Correction, 2026-11-04:** the previous version of this page claimed 4 of
+  5 alarm types were seen on air from a 2026-07-06 boot-burst capture. That
+  capture no longer exists to verify against, and the three alarm-type test
+  vectors derived from it (in the spec §6) share byte-for-byte identical
+  "stale" trailing bytes that shouldn't match across independently captured
+  frames — the likely explanation is that only one real frame was captured
+  and the other two were produced by editing its type/state bytes and
+  recomputing the CRC, not three independent captures. `sludge_reminder`
+  (`0x23`) was never actually captured on air at all, despite earlier
+  wording implying otherwise. Only `heartbeat` (`0x24`) is on solid footing
+  here; treat `0x20`/`0x21`/`0x22` as "decoder confirmed correct against at
+  most one real frame, not three," and `0x23`/`0x26` as unconfirmed on air.
 - Every capture so far is `state=0` (all-clear). No `state=1` frame has ever
   been recorded, so the state byte's meaning is firmware-derived, not observed.
   The recipe below forces one.
