@@ -137,10 +137,10 @@ as clear at boot.
 
 | Type | Name | Driven by (RAM alarm record) | Display codes | On-air confirmation |
 | --- | --- | --- | --- | --- |
-| `0x20` | chemical_low | `0x06FF` | E021 | captured, `state=0` |
-| `0x21` | high_water | `0x0707`, `0x070F`, `0x075B` (OR) | E031, E032, E033 | captured, `state=0` |
-| `0x22` | device_fault | `0x0717 + 8·i` (i = 0–5), `0x0747` (OR) | E040–E045, E047 | captured, `state=0` |
-| `0x23` | sludge_reminder | `0x074F` | E051 | captured, `state=0` |
+| `0x20` | chemical_low | `0x06FF` | E021 | unconfirmed — see §6 note |
+| `0x21` | high_water | `0x0707`, `0x070F`, `0x075B` (OR) | E031, E032, E033 | unconfirmed — see §6 note |
+| `0x22` | device_fault | `0x0717 + 8·i` (i = 0–5), `0x0747` (OR) | E040–E045, E047 | unconfirmed — see §6 note |
+| `0x23` | sludge_reminder | `0x074F` | E051 | **never captured on air** |
 | `0x26` | gsm_fault | `0x0757` | E012 | **never captured on air** |
 
 E011 (no radio connection) is never sent, and there is no separate status/OK
@@ -169,10 +169,25 @@ debugging/framing purposes.
 
 ## 6. Test vectors
 
-Real captured frames (boot-burst capture, 2026-07-06, power-cycling the outer
-unit — full context in [`rtl433-decoder.md`](rtl433-decoder.md)). Bytes
-below are `address + payload`, i.e. what a decoder sees after address-sync,
-before the CRC trailer:
+From a boot-burst capture, 2026-07-06, power-cycling the outer unit — full
+context in [`rtl433-decoder.md`](rtl433-decoder.md). Bytes below are
+`address + payload`, i.e. what a decoder sees after address-sync, before the
+CRC trailer.
+
+**Caveat, added 2026-11-04:** `heartbeat` is a genuine captured frame. The
+other three are not independently trustworthy as captures — their trailing
+"stale, not data" bytes are byte-for-byte identical
+(`bd3ff2f4baabde5fbfd17fbff72fff6fef`), which real independently-captured
+radio frames shouldn't produce, and the original capture no longer exists to
+re-verify against. The likely explanation: one real frame was captured and
+the other two were produced by editing its `type`/`state` bytes and
+recomputing the CRC — but which of the three (if any) is the real one is
+now unknown. Treat the header layout and CRC algorithm as confirmed (the
+heartbeat frame alone establishes those); treat the specific `type`/`state`
+values in `chemical_low`, `high_water`, and `device_fault` as
+structurally-correct illustrations only, not independent on-air
+confirmation of any one of those three type values. There is no vector at
+all for `sludge_reminder` (`0x23`) — it has never been captured on air.
 
 ```
 heartbeat:     eaeaeaea 0dcc6e4f800d6ec0234b0124b9c635bd3ff2f4b8abdc5effd177bff72fff6fef
@@ -223,15 +238,16 @@ plain power-cycle triggers it:
    should broadcast `msg_type=0x22`, `msg_state=1` (E045 on the display).
 5. Reconnect, power-cycle again, confirm a `state=0` clear frame.
 
-Note: the current reference decoder still uses the old type names, so it
-will label this frame `high_water` until it is updated (§8).
+Note: the reference decoder already uses the corrected type names (§8), so a
+correct capture of this frame should label it `device_fault`, not
+`high_water`.
 
 Full recipe with rationale: [`rtl433-decoder.md`](rtl433-decoder.md).
 
 ## 8. Reference implementation
 
 A C decoder for [rtl_433](https://github.com/merbanan/rtl_433) exists:
-[andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c).
+[andy778/rtl_433, branch `add-uponor-clean1-upstream`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1-upstream/src/devices/uponor_clean1.c).
 It implements address-sync via `bitbuffer_search`, all three validation gates
 from §3 (nRF905 CRC, `hdr_len == 12+N`, application CRC), `id` = `node_src`
 with the recipient as a separate `node_dst` field, the §4 type names, and a

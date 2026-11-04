@@ -4,7 +4,7 @@
 Assistant. Chip: Nordic **nRF9E5** (nRF905 transceiver + 8051 MCU) on U1.
 
 Decoder lives in the fork, not this repo:
-**[andy778/rtl_433, branch `add-uponor-clean1`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1/src/devices/uponor_clean1.c)**.
+**[andy778/rtl_433, branch `add-uponor-clean1-upstream`](https://github.com/andy778/rtl_433/blob/add-uponor-clean1-upstream/src/devices/uponor_clean1.c)**.
 It is **enabled**, CRC-gated, and tested end-to-end against a real capture
 (zero false positives on an unrelated 433 MHz capture).
 
@@ -118,8 +118,18 @@ sent; that needs a TX-capable radio.)
 
 ## What's still open
 
-- 4 of 5 alarm types seen on air (`0x20`/`0x21`/`0x22`/`0x23`, boot burst
-  2026-07-06, all `state=0`). `0x26` (GSM fault) has not been seen.
+- **Correction, 2026-11-04:** the previous version of this page claimed 4 of
+  5 alarm types were seen on air from a 2026-07-06 boot-burst capture. That
+  capture no longer exists to verify against, and the three alarm-type test
+  vectors derived from it (in the spec §6) share byte-for-byte identical
+  "stale" trailing bytes that shouldn't match across independently captured
+  frames — the likely explanation is that only one real frame was captured
+  and the other two were produced by editing its type/state bytes and
+  recomputing the CRC, not three independent captures. `sludge_reminder`
+  (`0x23`) was never actually captured on air at all, despite earlier
+  wording implying otherwise. Only `heartbeat` (`0x24`) is on solid footing
+  here; treat `0x20`/`0x21`/`0x22` as "decoder confirmed correct against at
+  most one real frame, not three," and `0x23`/`0x26` as unconfirmed on air.
 - Every capture so far is `state=0` (all-clear). No `state=1` frame has ever
   been recorded, so the state byte's meaning is firmware-derived, not observed.
   The recipe below forces one.
@@ -157,17 +167,140 @@ Keep it brief and don't run a treatment cycle with an actuator disconnected.
 
 ## Build & test
 
-The decoder lives on the `add-uponor-clean1` branch of
+The decoder lives on the `add-uponor-clean1-upstream` branch of
 [andy778/rtl_433](https://github.com/andy778/rtl_433), a fork of upstream
 [merbanan/rtl_433](https://github.com/merbanan/rtl_433) — not yet upstreamed.
 
+Build dependencies (Debian/Ubuntu-style packages; the fork doesn't change
+upstream's requirements): `build-essential cmake librtlsdr-dev libusb-1.0-0-dev
+pkg-config`.
+
 ```bash
 git clone https://github.com/andy778/rtl_433 && cd rtl_433
-git checkout add-uponor-clean1
+git checkout add-uponor-clean1-upstream
 mkdir build && cd build && cmake .. && make -j
 ./src/rtl_433 -r capture.cu8 -F json   # decoder is enabled, no -R needed
 ```
 
-For live capture: tune ~150 kHz low (`-f 868.20M`) so the carrier clears the
-RTL-SDR DC spike, `-Y minmax` (needed for the weaker far-unit packet), MQTT via
-`-F "mqtt://localhost:1883,events=uclean1/events"`.
+For live capture, use the settings this branch documents and the "Receivers
+tested" table above already validated live: `-f 868.05M -s 1000k`, `-Y minmax`
+(needed for the weaker far-unit packet).
+
+```bash
+./src/rtl_433 -f 868.05M -s 1000k -Y minmax -F json
+```
+
+## MQTT output
+
+`rtl_433`'s native `-F mqtt` output publishes every decoded event as JSON to a
+broker — no code changes needed, this is an upstream feature the fork
+inherits as-is:
+
+```bash
+./src/rtl_433 -f 868.05M -s 1000k -Y minmax \
+  -F "mqtt://localhost:1883,user=USERNAME,pass=PASSWORD,retain=0,events=uclean1/events,devices=uclean1/events/devices[/model][/id]"
+```
+
+- Default broker is `localhost:1883`; user/pass can also come from the
+  `MQTT_USERNAME`/`MQTT_PASSWORD` env vars instead of the command line.
+- **Both `events=` and `devices=` must be set, and `devices=` must be nested
+  under the same path `events=` uses** (shown above) — see "Home Assistant
+  via MQTT discovery" below for why; dropping either, or pointing them at
+  unrelated topics, is a real footgun that produces HA entities that exist
+  but never show a value.
+- `mqtts://` plus `tls_cert=`/`tls_key=`/`tls_ca_cert=` enables TLS.
+- The `events=` payload is this decoder's fields as JSON — `model`, `id`,
+  `msg_type`, `msg_state` (see "What's still open" above for the current
+  field names and known alarm-type/state mapping) — not a home-brewed schema.
+
+**This MQTT stream is unauthenticated to anyone who can reach the broker** —
+anyone able to publish/subscribe can spoof or read plant-alarm state, so keep
+the broker on a trusted network/VLAN, not exposed to the internet.
+
+## Home Assistant via MQTT discovery
+
+Upstream rtl_433 ships `examples/rtl_433_mqtt_hass.py`, a small bridge that
+subscribes to the rtl_433 *events* topic and publishes [Home Assistant MQTT
+discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
+config messages, so decoded devices show up as HA entities automatically
+instead of needing hand-written `configuration.yaml` sensors. **It's a
+template, meant to be copied and edited, not run unmodified** — it only
+publishes a discovery config for a field if that field's name is a key in
+its `mappings` dict; anything else is silently skipped, not published as a
+generic entity. The `add-uponor-clean1-upstream` branch's copy of this file
+is the same as real upstream's (same `mappings` entries, `-I/--ids` filters
+by `str` on both), so it has no entries for this decoder's own fields
+(`msg_name`, `msg_state`, `msg_type`, `role`, `node_dst`) — without adding
+them yourself, those fields would never reach Home Assistant at all.
+
+Critically, this bridge **never republishes a field's actual value** — it
+only ever publishes the discovery *config* message, whose `state_topic` it
+derives from wherever the *events* message it just parsed arrived on, plus
+rtl_433's own `devices[/type][/model][/subtype][/channel][/id]` topic
+convention (`-T`/`--device-topic_suffix`, same default as rtl_433's own
+`devices=`). The actual values have to land on that derived topic by some
+other means — normally rtl_433's own `devices=` MQTT output, which is why
+`events=` and `devices=` must both be set above, with `devices=` nested
+under the exact topic `events=` uses: `topic_prefix` is always the first two
+path segments of whatever topic the events message arrived on (`uclean1`,
+`events`), so `devices=` has to publish under `uclean1/events/devices/...`
+for the two to line up. Point `devices=` anywhere else (or omit it) and HA
+creates the entities but they never show a value.
+
+[`tools/rtl_433_mqtt_hass_uclean1.py`](../tools/rtl_433_mqtt_hass_uclean1.py)
+in this repo is that upstream file with those five fields already mapped
+(an `msg_state` binary_sensor with `device_class: problem`, an `msg_name`
+sensor, and diagnostic sensors for `msg_type`/`role`/`node_dst`) — use it
+as-is, or as the base for further customization:
+
+```bash
+python3 tools/rtl_433_mqtt_hass_uclean1.py \
+  -H localhost -p 1883 -u USERNAME -P PASSWORD \
+  -R "uclean1/events" -D homeassistant
+```
+
+- `-R`/`--rtl-topic` must match the `events=` topic rtl_433's `-F mqtt` used
+  above (default `rtl_433/+/events`) — if you changed `events=` on the
+  rtl_433 side, pass the same value here (with the `+` wildcard if multiple
+  hosts publish).
+- `-T`/`--device-topic_suffix` doesn't need overriding here — its default
+  (`devices[/type][/model][/subtype][/channel][/id]`) already matches the
+  `devices=` value above once `type`/`subtype`/`channel` (fields this
+  decoder never emits) drop out of the brackets.
+- `-D`/`--discovery-prefix` (default `homeassistant`) must match the
+  `discovery` prefix HA's MQTT integration expects (the HA default, so usually
+  leave it).
+- `-i`/`--interval` controls how often configs are republished (default 600 s)
+  and `-r`/`--retain` retains them so HA sees the entities again after an HA
+  restart without rtl_433 needing to re-publish first.
+- `msg_state` is only present on alarm frames (`msg_type` 0x20/0x21/0x22/0x23/
+  0x26), not on heartbeat/ack frames — so the "Uponor Alarm Active" entity
+  only appears in HA after the first real alarm frame is seen, not at startup.
+- Run both processes (`rtl_433 -F mqtt://...` and this script) as
+  long-running services (systemd units, or alongside HA's own add-ons) so
+  discovery configs get republished and HA keeps seeing fresh state.
+
+## For testers
+
+Everything above should get you from a clean clone to alarms in Home
+Assistant. If you're trying this against a real unit, here's what's actually
+useful to report back — see "What's still open" above for the full picture:
+
+- **A `state=1` frame, any alarm type.** Every capture so far is `state=0`
+  (all-clear) — the state byte's meaning is derived from firmware, never
+  observed on air. The "Recipe: capturing a `state=1` frame" above describes
+  one way to force one (disconnecting an actuator before power-up); a real
+  fault triggering it naturally is just as valuable, maybe more.
+- **A `0x26` (`gsm_fault`) frame**, of any state. Not seen on air at all yet.
+- Whether the decoder still decodes correctly on a unit other than this
+  project's board B — different firmware/radio revisions could, in
+  principle, behave differently (see the "Two boards" note in
+  [`CLAUDE.md`](../CLAUDE.md) for why that's worth checking explicitly).
+- If you hit a decode failure, a raw `.cu8` capture (see "Capture" above) is
+  far more useful than a description — it lets anyone reproduce the exact
+  bits that failed to decode, rather than guessing from a log line.
+- Open an issue against [this repo](https://github.com/andy778/UClean1/issues)
+  (protocol/decoding questions) or
+  [the fork](https://github.com/andy778/rtl_433/issues) (build/decoder-code
+  issues specific to `add-uponor-clean1-upstream`) — whichever fits what you
+  hit.
