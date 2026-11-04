@@ -4,6 +4,10 @@ name: Dependabot auto-merge
 # routine dependency updates land without manual attention. Major bumps still
 # require a human. Requires the repo setting "Allow auto-merge" to be enabled.
 
+# pull_request_target is required here so GITHUB_TOKEN has write access to
+# approve/merge; no PR code is checked out or executed (only fetch-metadata,
+# which reads PR metadata, and gh pr review/merge), so the usual
+# pull_request_target code-injection risk doesn't apply. See .github/zizmor.yml.
 on: pull_request_target
 
 permissions:
@@ -17,7 +21,7 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v3
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
 
       - name: Approve and enable auto-merge (minor/patch only)
         if: >

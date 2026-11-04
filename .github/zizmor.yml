@@ -1,0 +1,7 @@
+rules:
+  dangerous-triggers:
+    ignore:
+      # dependabot-auto-merge.yml only reads PR metadata (fetch-metadata) and
+      # calls gh pr review/merge - it never checks out or executes PR code,
+      # so pull_request_target's usual code-injection risk doesn't apply here.
+      - dependabot-auto-merge.yml
