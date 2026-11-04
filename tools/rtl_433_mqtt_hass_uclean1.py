@@ -885,10 +885,10 @@ mappings = {
     },
 
     # --- Uponor Clean 1 (andy778/rtl_433, add-uponor-clean1-upstream) ---
-    # msg_name/msg_type/msg_state/role are this decoder's own output fields,
-    # not an upstream rtl_433 convention; see docs/rtl433-decoder.md and
-    # docs/rtl433-implementation-spec.md §4/§8 in this project (UClean1) for
-    # what each value means. msg_state is only present on alarm frames
+    # msg_name/msg_type/msg_state/role/node_dst are this decoder's own output
+    # fields, not an upstream rtl_433 convention; see docs/rtl433-decoder.md
+    # and docs/rtl433-implementation-spec.md §4/§8 in this project (UClean1)
+    # for what each value means. msg_state is only present on alarm frames
     # (msg_type 0x20/0x21/0x22/0x23/0x26), not on heartbeat/ack frames.
     "msg_name": {
         "device_type": "sensor",
@@ -928,6 +928,17 @@ mappings = {
         "object_suffix": "role",
         "config": {
             "name": "Uponor Frame Role",
+            "entity_category": "diagnostic",
+            "enabled_by_default": False,
+            "value_template": "{{ value }}"
+        }
+    },
+
+    "node_dst": {
+        "device_type": "sensor",
+        "object_suffix": "node_dst",
+        "config": {
+            "name": "Uponor Destination Node",
             "entity_category": "diagnostic",
             "enabled_by_default": False,
             "value_template": "{{ value }}"

@@ -198,19 +198,20 @@ inherits as-is:
 
 ```bash
 ./src/rtl_433 -f 868.05M -s 1000k -Y minmax \
-  -F "mqtt://localhost:1883,user=USERNAME,pass=PASSWORD,retain=0,events=uclean1/events"
+  -F "mqtt://localhost:1883,user=USERNAME,pass=PASSWORD,retain=0,events=uclean1/events,devices=uclean1/events/devices[/model][/id]"
 ```
 
 - Default broker is `localhost:1883`; user/pass can also come from the
   `MQTT_USERNAME`/`MQTT_PASSWORD` env vars instead of the command line.
-- `events=<topic>` (shown above) overrides the default event topic
-  (`rtl_433/HOSTNAME/events`); drop it to use the default, or use
-  `devices=uclean1[/id]` instead for one topic per device rather than one
-  shared events stream.
+- **Both `events=` and `devices=` must be set, and `devices=` must be nested
+  under the same path `events=` uses** (shown above) — see "Home Assistant
+  via MQTT discovery" below for why; dropping either, or pointing them at
+  unrelated topics, is a real footgun that produces HA entities that exist
+  but never show a value.
 - `mqtts://` plus `tls_cert=`/`tls_key=`/`tls_ca_cert=` enables TLS.
-- The payload is this decoder's fields as JSON — `model`, `id`, `msg_type`,
-  `msg_state` (see "What's still open" above for the current field names and
-  known alarm-type/state mapping) — not a home-brewed schema.
+- The `events=` payload is this decoder's fields as JSON — `model`, `id`,
+  `msg_type`, `msg_state` (see "What's still open" above for the current
+  field names and known alarm-type/state mapping) — not a home-brewed schema.
 
 **This MQTT stream is unauthenticated to anyone who can reach the broker** —
 anyone able to publish/subscribe can spoof or read plant-alarm state, so keep
@@ -219,7 +220,7 @@ the broker on a trusted network/VLAN, not exposed to the internet.
 ## Home Assistant via MQTT discovery
 
 Upstream rtl_433 ships `examples/rtl_433_mqtt_hass.py`, a small bridge that
-subscribes to the rtl_433 events topic and publishes [Home Assistant MQTT
+subscribes to the rtl_433 *events* topic and publishes [Home Assistant MQTT
 discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
 config messages, so decoded devices show up as HA entities automatically
 instead of needing hand-written `configuration.yaml` sensors. **It's a
@@ -229,14 +230,28 @@ its `mappings` dict; anything else is silently skipped, not published as a
 generic entity. The `add-uponor-clean1-upstream` branch's copy of this file
 is the same as real upstream's (same `mappings` entries, `-I/--ids` filters
 by `str` on both), so it has no entries for this decoder's own fields
-(`msg_name`, `msg_state`, `msg_type`, `role`) — without adding them yourself,
-those fields would never reach Home Assistant at all.
+(`msg_name`, `msg_state`, `msg_type`, `role`, `node_dst`) — without adding
+them yourself, those fields would never reach Home Assistant at all.
+
+Critically, this bridge **never republishes a field's actual value** — it
+only ever publishes the discovery *config* message, whose `state_topic` it
+derives from wherever the *events* message it just parsed arrived on, plus
+rtl_433's own `devices[/type][/model][/subtype][/channel][/id]` topic
+convention (`-T`/`--device-topic_suffix`, same default as rtl_433's own
+`devices=`). The actual values have to land on that derived topic by some
+other means — normally rtl_433's own `devices=` MQTT output, which is why
+`events=` and `devices=` must both be set above, with `devices=` nested
+under the exact topic `events=` uses: `topic_prefix` is always the first two
+path segments of whatever topic the events message arrived on (`uclean1`,
+`events`), so `devices=` has to publish under `uclean1/events/devices/...`
+for the two to line up. Point `devices=` anywhere else (or omit it) and HA
+creates the entities but they never show a value.
 
 [`tools/rtl_433_mqtt_hass_uclean1.py`](../tools/rtl_433_mqtt_hass_uclean1.py)
-in this repo is that upstream file with those four fields already mapped
+in this repo is that upstream file with those five fields already mapped
 (an `msg_state` binary_sensor with `device_class: problem`, an `msg_name`
-sensor, and diagnostic sensors for `msg_type`/`role`) — use it as-is, or as
-the base for further customization:
+sensor, and diagnostic sensors for `msg_type`/`role`/`node_dst`) — use it
+as-is, or as the base for further customization:
 
 ```bash
 python3 tools/rtl_433_mqtt_hass_uclean1.py \
@@ -244,9 +259,14 @@ python3 tools/rtl_433_mqtt_hass_uclean1.py \
   -R "uclean1/events" -D homeassistant
 ```
 
-- `-R`/`--rtl-topic` must match whatever topic rtl_433's `-F mqtt` used above
-  (default `rtl_433/+/events`) — if you changed `events=` on the rtl_433 side,
-  pass the same value here (with the `+` wildcard if multiple hosts publish).
+- `-R`/`--rtl-topic` must match the `events=` topic rtl_433's `-F mqtt` used
+  above (default `rtl_433/+/events`) — if you changed `events=` on the
+  rtl_433 side, pass the same value here (with the `+` wildcard if multiple
+  hosts publish).
+- `-T`/`--device-topic_suffix` doesn't need overriding here — its default
+  (`devices[/type][/model][/subtype][/channel][/id]`) already matches the
+  `devices=` value above once `type`/`subtype`/`channel` (fields this
+  decoder never emits) drop out of the brackets.
 - `-D`/`--discovery-prefix` (default `homeassistant`) must match the
   `discovery` prefix HA's MQTT integration expects (the HA default, so usually
   leave it).
