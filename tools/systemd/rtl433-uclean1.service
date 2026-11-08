@@ -1,0 +1,14 @@
+[Unit]
+Description=Uponor Clean 1 rtl_433 decoder + Home Assistant MQTT discovery bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/rtl433-uclean1/credentials.env
+ExecStart=%h/.config/rtl433-uclean1/run-uclean1-bridge.sh
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
