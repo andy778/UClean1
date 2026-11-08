@@ -227,11 +227,9 @@ instead of needing hand-written `configuration.yaml` sensors. **It's a
 template, meant to be copied and edited, not run unmodified** — it only
 publishes a discovery config for a field if that field's name is a key in
 its `mappings` dict; anything else is silently skipped, not published as a
-generic entity. The `add-uponor-clean1-upstream` branch's copy of this file
-is the same as real upstream's (same `mappings` entries, `-I/--ids` filters
-by `str` on both), so it has no entries for this decoder's own fields
-(`msg_name`, `msg_state`, `msg_type`, `role`, `node_dst`) — without adding
-them yourself, those fields would never reach Home Assistant at all.
+generic entity. Upstream's own copy has no entries for this decoder's own
+fields (`msg_name`, `msg_state`, `msg_type`, `role`, `node_dst`) — without
+adding them, those fields would never reach Home Assistant at all.
 
 Critically, this bridge **never republishes a field's actual value** — it
 only ever publishes the discovery *config* message, whose `state_topic` it
@@ -248,10 +246,11 @@ for the two to line up. Point `devices=` anywhere else (or omit it) and HA
 creates the entities but they never show a value.
 
 [`tools/rtl_433_mqtt_hass_uclean1.py`](../tools/rtl_433_mqtt_hass_uclean1.py)
-in this repo is that upstream file with those five fields already mapped
-(an `msg_state` binary_sensor with `device_class: problem`, an `msg_name`
-sensor, and diagnostic sensors for `msg_type`/`role`/`node_dst`) — use it
-as-is, or as the base for further customization:
+in this repo is upstream's bridge trimmed down to just this decoder's five
+fields already mapped (an `msg_state` binary_sensor with `device_class:
+problem`, an `msg_name` sensor, and diagnostic sensors for
+`msg_type`/`role`/`node_dst`) — use it as-is, or as the base for further
+customization:
 
 ```bash
 python3 tools/rtl_433_mqtt_hass_uclean1.py \
@@ -277,8 +276,11 @@ python3 tools/rtl_433_mqtt_hass_uclean1.py \
   0x26), not on heartbeat/ack frames — so the "Uponor Alarm Active" entity
   only appears in HA after the first real alarm frame is seen, not at startup.
 - Run both processes (`rtl_433 -F mqtt://...` and this script) as
-  long-running services (systemd units, or alongside HA's own add-ons) so
-  discovery configs get republished and HA keeps seeing fresh state.
+  long-running services, not one-off foreground commands, so discovery
+  configs get republished and HA keeps seeing fresh state. On Linux,
+  [`tools/systemd/`](../tools/systemd/README.md) has a ready-to-copy
+  `systemd --user` unit that runs both together, supervised as a pair, with
+  install steps.
 
 ## For testers
 
