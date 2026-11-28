@@ -131,7 +131,7 @@ hundreds digit is the cycle (1 = cleaning, 2 = waiting, 3 = maintenance,
 | `S201`–`S204` | Waiting mode (vänteläge) |
 | `S301`–`S305` | Maintenance phase (underhållsfas) |
 | `S400`        | Test cycle started |
-| `S401`–`S408` | Test steps: pump-in, sludge-removal, pump-out, chem-fill, dose, settle, aeration I, aeration II |
+| `S401`–`S406` | Test steps: pump-in, sludge-removal, pump-out, chem-fill, dose, aeration — firmware-confirmed for Proc Ver 30 (6 steps, not the manual's 8; see [eeprom-map.md](eeprom-map.md)) |
 
 ### `ALARM STATUS` / fault `E`-codes
 

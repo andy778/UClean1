@@ -11,7 +11,7 @@ does and how to build `rtl_433` itself.
 
 ```bash
 mkdir -p ~/.config/rtl433-uclean1
-cp tools/systemd/run-uclean1-bridge.sh tools/systemd/credentials.env.example ~/.config/rtl433-uclean1/
+cp tools/systemd/run-uclean1-bridge.sh tools/systemd/credentials.env.example tools/rtl_433_mqtt_hass_uclean1.py ~/.config/rtl433-uclean1/
 mv ~/.config/rtl433-uclean1/credentials.env.example ~/.config/rtl433-uclean1/credentials.env
 chmod 700 ~/.config/rtl433-uclean1/run-uclean1-bridge.sh
 chmod 600 ~/.config/rtl433-uclean1/credentials.env
@@ -48,17 +48,28 @@ journalctl --user -u rtl433-uclean1.service -f
 New devices (`Uponor-Clean-1-<node id>`) should appear in Home Assistant
 within about a minute (heartbeat cadence is ~62s).
 
+The outer unit's device gets one `problem` binary sensor per alarm type
+(Chemical Low, High Water, Device Fault, Sludge Reminder, GSM Fault) and a
+Radio Link connectivity sensor. The alarm sensors read `unknown` until the
+unit sends that type — it sends each alarm only when it changes, and all
+five as clear at boot, so power-cycling the outer unit once fills them in.
+The bridge keeps each alarm's last state as a retained MQTT message, so it
+survives Home Assistant and bridge restarts.
+
 ## Notes
 
 - The two processes are supervised together: if either `rtl_433` or the
   bridge exits, the wrapper script exits and systemd restarts the whole
   unit, relaunching both fresh. This avoids an orphaned `rtl_433` holding
   the RTL-SDR dongle (`usb_claim_interface` busy) across restarts.
-- `-x 150` (in `run-uclean1-bridge.sh`) marks each entity `unavailable` in
-  Home Assistant after ~2.5 missed heartbeat cycles, instead of leaving it
-  silently frozen at its last value if a device stops transmitting.
+- `-x 150` (in `run-uclean1-bridge.sh`) turns the Radio Link sensor off
+  after ~2.5 missed heartbeat cycles, and marks the diagnostic sensors
+  `unavailable`. It does not apply to the alarm sensors: an alarm frame is
+  sent once per change, so expiring them would hide an alarm that is still
+  active.
 - The script and service file are a starting point, not auto-updated —
   if you pull changes to `rtl_433_mqtt_hass_uclean1.py` or this directory,
-  re-copy `run-uclean1-bridge.sh` and `rtl433-uclean1.service` and
+  re-copy `rtl_433_mqtt_hass_uclean1.py`, `run-uclean1-bridge.sh` and
+  `rtl433-uclean1.service` and
   `systemctl --user daemon-reload && systemctl --user restart
   rtl433-uclean1.service`.

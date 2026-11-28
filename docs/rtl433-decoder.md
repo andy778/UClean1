@@ -231,7 +231,7 @@ generic entity. Upstream's own copy has no entries for this decoder's own
 fields (`msg_name`, `msg_state`, `msg_type`, `role`, `node_dst`) — without
 adding them, those fields would never reach Home Assistant at all.
 
-Critically, this bridge **never republishes a field's actual value** — it
+Critically, upstream's bridge **never republishes a field's actual value** — it
 only ever publishes the discovery *config* message, whose `state_topic` it
 derives from wherever the *events* message it just parsed arrived on, plus
 rtl_433's own `devices[/type][/model][/subtype][/channel][/id]` topic
@@ -246,10 +246,16 @@ for the two to line up. Point `devices=` anywhere else (or omit it) and HA
 creates the entities but they never show a value.
 
 [`tools/rtl_433_mqtt_hass_uclean1.py`](../tools/rtl_433_mqtt_hass_uclean1.py)
-in this repo is upstream's bridge trimmed down to just this decoder's five
-fields already mapped (an `msg_state` binary_sensor with `device_class:
-problem`, an `msg_name` sensor, and diagnostic sensors for
-`msg_type`/`role`/`node_dst`) — use it as-is, or as the base for further
+in this repo is upstream's bridge trimmed down to this decoder, with one
+addition for the alarms. Plain field mappings cover the diagnostic sensors
+(`msg_name` as "Last Message", `msg_type`, `role`, `node_dst`). `msg_state`
+is not mapped directly: the outer unit sends `[type, state]` separately for
+each of the five alarm types, and only when that type changes, so a single
+`msg_state` entity would show whichever type was sent last. Instead the
+bridge republishes each alarm frame's state to its own retained topic
+(`<device topic>/alarm/<msg_name>`) and announces one `problem`
+binary_sensor per type, plus a "Radio Link" connectivity sensor that every
+frame from the node refreshes. Use it as-is, or as the base for further
 customization:
 
 ```bash
@@ -272,9 +278,17 @@ python3 tools/rtl_433_mqtt_hass_uclean1.py \
 - `-i`/`--interval` controls how often configs are republished (default 600 s)
   and `-r`/`--retain` retains them so HA sees the entities again after an HA
   restart without rtl_433 needing to re-publish first.
-- `msg_state` is only present on alarm frames (`msg_type` 0x20/0x21/0x22/0x23/
-  0x26), not on heartbeat/ack frames — so the "Uponor Alarm Active" entity
-  only appears in HA after the first real alarm frame is seen, not at startup.
+- `-x`/`--expire-after` sets how long after the last frame the Radio Link
+  sensor turns off (default 150 s, ~2.5 missed heartbeats) and the
+  diagnostic sensors go `unavailable`. It is not applied to the alarm
+  sensors, which would otherwise go `unavailable` a few minutes after an
+  alarm's only frame while the alarm is still active.
+- The five alarm sensors are announced on the first heartbeat but read
+  `unknown` until that type is sent. The unit sends all five as clear at
+  boot (`FUN_e372`), so power-cycling the outer unit once fills them in;
+  after that the retained topics carry the state across restarts.
+- The old single "Uponor Alarm Active" entity (`<id>-fault`) is removed
+  automatically: the bridge clears its discovery config once per device.
 - Run both processes (`rtl_433 -F mqtt://...` and this script) as
   long-running services, not one-off foreground commands, so discovery
   configs get republished and HA keeps seeing fresh state. On Linux,

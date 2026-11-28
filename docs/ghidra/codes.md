@@ -177,7 +177,7 @@ doing something different:
 | Hold | Action | Display behavior |
 | --- | --- | --- |
 | < 5 s | Show current `PLANT STATUS` S-code | `Snnn` for 30 s, then back to *satsräknare* |
-| 5–10 s | Start the **Test cycle** (EEPROM cycle 4, [eeprom-map.md](../eeprom-map.md)) | counts `1,2,3,4,S5,S6,S7…` while held, release at `S__5`; then `S400`, then the 8-step sequence |
+| 5–10 s | Start the **Test cycle** (EEPROM cycle 4, [eeprom-map.md](../eeprom-map.md)) | counts `1,2,3,4,S5,S6,S7…` while held, release at `S__5`; then `S400`, then the 6-step sequence (firmware-confirmed for Proc Ver 30; the manual lists 8) |
 | 10–14 s | Reset the sludge-emptying reminder | counts seconds while held; release → `E000` |
 
 The hold logic is `FUN_a245` (thresholds from `0xa2c9`, actions in

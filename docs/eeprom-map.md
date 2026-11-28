@@ -167,27 +167,33 @@ inputs (`J4` header —
 `Startup level`, `High water`, `Chemical pressure`, `Spare`; see
 [README.md](../README.md)).
 
-**Cycle 4 (`Test cycle`), full 8-phase list + real durations — from the manual**
-(installation manual, "Test function" section; matches this EEPROM entry's 6
-named phases plus the two unnamed steps the durations-only reading missed):
+**Cycle 4 (`Test cycle`), full phase list + real durations — firmware-confirmed
+(Proc Ver 30)**
 
-| S-code | Step | Duration |
-| --- | --- | --- |
-| `S401` | Pump-in | 20 s |
-| `S402` | Sludge removal | 20 s |
-| `S403` | Pump-out | 5 s |
-| `S404` | Chemical-pump fill | 90 s |
-| `S405` | Chemical dosing | 10 s |
-| `S406` | Precipitation/settling (no actuator on) | 10 s |
-| `S407` | Aeration I | 30 s |
-| `S408` | Aeration II | 30 s |
+The installation manual's "Test function" section lists 8 steps (`S401`-`S408`,
+including a settling step and two aeration steps), but Proc Ver 30's handler
+(`0xc719`, phases 1-6 only, `cmp #6`) runs only 6:
+
+| S-code | Step | Outputs | Duration |
+| --- | --- | --- | --- |
+| `S401` | Pump-in | `0x11` | 20 s |
+| `S402` | Sludge removal | `0x05` | 20 s |
+| `S403` | Pump-out | `0x09` | 5 s |
+| `S404` | Chemical filling | `0x06` | 90 s |
+| `S405` | Dosing | `0x03` | 10 s |
+| `S406` | Aeration | `0x21` | 30 s |
+
+The manual's "settle" and "Aeration II" steps don't exist in this firmware
+version — likely a difference between firmware versions rather than a
+documentation error.
 
 Triggered by the styrskåp's own **green Test button** (not radio/serial): hold
 **5–10 seconds** (release when the display reaches `S__5`, i.e. `S405`) starts
 it; the display counts `1,2,3,4,S5,S6,S7…` while held, then shows `S400`, then
-runs the 8 steps above in order, then returns to the *satsräknare* (the cycle
-counter shown on the display in normal operation). Also reachable via the
-PlantCare app (`Test > Test cycle`).
+runs the 6 steps above in order. It then starts a full cleaning batch
+(`0xc959`: `clra; sta $05f4; inca; jmp $ca4e`) rather than returning to the
+*satsräknare* (the cycle counter shown on the display in normal operation).
+Also reachable via the PlantCare app (`Test > Test cycle`).
 
 **Two other Test-button hold durations, same button:**
 - **< 5 seconds**: shows the current `PLANT STATUS` S-code (RAM
