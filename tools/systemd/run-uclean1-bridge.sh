@@ -10,9 +10,13 @@
 # EnvironmentFile=. Replace YOUR_HA_HOST below with your Home Assistant /
 # MQTT broker host.
 #
-# -x 150 marks each HA entity unavailable after ~2.5 missed heartbeat
-# cycles (heartbeat cadence is ~62s) instead of leaving it silently frozen
-# at its last value forever.
+# -x 150 turns the "Uponor Radio Link" entity off after ~2.5 missed
+# heartbeat cycles (heartbeat cadence is ~62s). The five alarm entities
+# never expire: the unit sends each alarm change once, so they keep their
+# last (retained) state.
+#
+# rtl_433_mqtt_hass_uclean1.py is expected next to this script (see
+# README.md, Install).
 set -euo pipefail
 
 cleanup() {
@@ -24,7 +28,7 @@ rtl_433 -f 868.05M -s 1000k -Y minmax \
     -F "mqtt://YOUR_HA_HOST:1883,user=${MQTT_USERNAME},pass=${MQTT_PASSWORD},retain=0,events=uclean1/events,devices=uclean1/events/devices[/model][/id]" &
 RTL_PID=$!
 
-python3 "$(dirname "$0")/../rtl_433_mqtt_hass_uclean1.py" \
+python3 "$(dirname "$0")/rtl_433_mqtt_hass_uclean1.py" \
     -H YOUR_HA_HOST -R uclean1/events -D homeassistant -x 150 &
 BRIDGE_PID=$!
 

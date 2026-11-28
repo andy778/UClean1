@@ -4,9 +4,19 @@
 # Minimal Home Assistant MQTT discovery bridge for the Uponor Clean 1
 # rtl_433 decoder (andy778/rtl_433, branch add-uponor-clean1-upstream).
 # Trimmed from upstream's examples/rtl_433_mqtt_hass.py: only the field
-# mappings this decoder actually emits (msg_name, msg_state, msg_type,
-# role, node_dst) are kept. msg_state is only present on alarm frames
-# (msg_type 0x20/0x21/0x22/0x23/0x26), not on heartbeat/ack frames.
+# mappings this decoder actually emits (msg_name, msg_type, role,
+# node_dst) are kept.
+#
+# Alarms are not a plain field mapping. The outer unit sends [type, state]
+# for each of the five alarm types separately, and only when that type
+# changes (FUN_e0e5; all five as clear at boot, FUN_e372). One shared
+# msg_state entity would show whichever type was sent last, and an
+# expire_after on it would turn a days-long alarm "unavailable" a few
+# minutes after its only frame. So the bridge republishes each alarm
+# frame's state to its own retained topic, <device topic>/alarm/<msg_name>,
+# with one binary_sensor per type and no expire_after. Link health is a
+# separate connectivity binary_sensor fed by every frame from the node
+# (heartbeat ~62 s), which turns off -x seconds after the last one.
 
 from __future__ import print_function
 from __future__ import with_statement
@@ -36,21 +46,10 @@ mappings = {
         "device_type": "sensor",
         "object_suffix": "alarm",
         "config": {
-            "name": "Uponor Alarm Type",
-            "icon": "mdi:alert-circle-outline",
+            "name": "Uponor Last Message",
+            "icon": "mdi:message-outline",
+            "entity_category": "diagnostic",
             "value_template": "{{ value }}"
-        }
-    },
-
-    "msg_state": {
-        "device_type": "binary_sensor",
-        "object_suffix": "fault",
-        "config": {
-            "name": "Uponor Alarm Active",
-            "device_class": "problem",
-            "force_update": "true",
-            "payload_on": "1",
-            "payload_off": "0"
         }
     },
 
@@ -88,6 +87,58 @@ mappings = {
     },
 
 }
+
+# The five alarm types (msg_name as emitted by the decoder) and the display
+# codes behind each. One retained binary_sensor per type; no icon override,
+# so HA's device_class "problem" icon shows the state.
+ALARM_TYPES = {
+    "chemical_low":    ("Uponor Chemical Low",    "E021"),
+    "high_water":      ("Uponor High Water",      "E031-E033"),
+    "device_fault":    ("Uponor Device Fault",    "E040-E045, E047"),
+    "sludge_reminder": ("Uponor Sludge Reminder", "E051"),
+    "gsm_fault":       ("Uponor GSM Fault",       "E012"),
+}
+
+# Retained discovery config of the old single "Uponor Alarm Active" entity
+# (object suffix "fault"); cleared once per device so it doesn't linger.
+LEGACY_OBJECT_SUFFIXES = [("binary_sensor", "fault")]
+
+LINK_TIMEOUT_DEFAULT = 150  # ~2.5 missed heartbeats when -x isn't given
+
+cleared_legacy = set()
+
+
+def alarm_mapping(name):
+    """Discovery mapping for one alarm type's binary_sensor."""
+    label, _codes = ALARM_TYPES[name]
+    return {
+        "device_type": "binary_sensor",
+        "object_suffix": name,
+        "no_expire": True,
+        "config": {
+            "name": label,
+            "device_class": "problem",
+            "payload_on": "1",
+            "payload_off": "0",
+        },
+    }
+
+
+def link_mapping(timeout):
+    """Discovery mapping for the radio-link connectivity binary_sensor."""
+    return {
+        "device_type": "binary_sensor",
+        "object_suffix": "link",
+        "no_expire": True,
+        "config": {
+            "name": "Uponor Radio Link",
+            "device_class": "connectivity",
+            "entity_category": "diagnostic",
+            "payload_on": "ON",
+            "off_delay": timeout,
+        },
+    }
+
 
 TOPIC_PARSE_RE = re.compile(r'\[(?P<slash>/?)(?P<token>[^\]:]+):?(?P<default>[^\]:]*)\]')
 
@@ -201,7 +252,7 @@ def publish_config(mqttc, topic, model, object_id, mapping, key=None):
     if args.force_update:
         config["force_update"] = "true"
 
-    if args.expire_after:
+    if args.expire_after and not mapping.get("no_expire"):
         config["expire_after"] = args.expire_after
 
     logging.debug(path + ":" + json.dumps(config))
@@ -250,6 +301,55 @@ def bridge_event_to_hass(mqttc, topic_prefix, data):
 
         if skipped_keys:
             logging.info("Skipped %s: %s" % (device_id, ", ".join(skipped_keys)))
+
+    clear_legacy_entities(mqttc, device_id)
+    bridge_link(mqttc, base_topic, model, device_id)
+    bridge_alarm(mqttc, base_topic, model, device_id, data)
+
+
+def clear_legacy_entities(mqttc, device_id):
+    """Remove the retired single alarm entity's discovery config, once per device."""
+    if device_id in cleared_legacy:
+        return
+    cleared_legacy.add(device_id)
+    for device_type, suffix in LEGACY_OBJECT_SUFFIXES:
+        object_name = "-".join([device_id, suffix])
+        path = "/".join([args.discovery_prefix, device_type, device_id, object_name, "config"])
+        mqttc.publish(path, "", retain=True)
+
+
+def bridge_link(mqttc, base_topic, model, device_id):
+    """Every frame from a node (heartbeat ~62 s, or ACK) marks its link up."""
+    topic = base_topic + "/link"
+    timeout = args.expire_after or LINK_TIMEOUT_DEFAULT
+    publish_config(mqttc, topic, model, device_id, link_mapping(timeout))
+    # Not retained: after an HA restart the link reads unknown until the next
+    # frame rather than "connected" from a stale message.
+    mqttc.publish(topic, "ON", retain=False)
+
+
+def bridge_alarm(mqttc, base_topic, model, device_id, data):
+    """Republish an alarm frame's state to its type's own retained topic."""
+    if data.get("role") != "message":
+        return
+    name = data.get("msg_name")
+    if name != "heartbeat" and name not in ALARM_TYPES:
+        return
+
+    # The node that sends heartbeats/alarms is the outer unit: announce all
+    # five so they exist before the first alarm frame (they read "unknown"
+    # until the unit's next change or boot burst).
+    for alarm in ALARM_TYPES:
+        publish_config(mqttc, "/".join([base_topic, "alarm", alarm]),
+                       model, device_id, alarm_mapping(alarm), alarm)
+
+    if name in ALARM_TYPES and "msg_state" in data:
+        state = str(data["msg_state"])
+        # Retained: the unit sends each change once (it resends all five only
+        # after a range test, FUN_e427), so the broker has to hold the
+        # current state across HA and bridge restarts.
+        mqttc.publish("/".join([base_topic, "alarm", name]), state, retain=True)
+        logging.info("Alarm %s %s: %s" % (device_id, name, state))
 
 
 def rtl_433_bridge():
@@ -329,7 +429,9 @@ if __name__ == "__main__":
                         help="Interval to republish config topics in seconds (default: %(default)d)")
     parser.add_argument("-x", "--expire-after", type=int,
                         dest="expire_after",
-                        help="Number of seconds with no updates after which the sensor becomes unavailable")
+                        help="Seconds with no frame from a node after which its Radio Link turns off "
+                             "and its diagnostic sensors become unavailable (default for the link: "
+                             "%d). Alarm sensors never expire." % LINK_TIMEOUT_DEFAULT)
     parser.add_argument("-I", "--ids", type=str, nargs="+",
                         help="ID's of devices that will be discovered (omit for all)")
     args = parser.parse_args()
