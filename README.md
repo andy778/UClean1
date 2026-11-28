@@ -42,13 +42,17 @@ heartbeat, all 5 alarm types); the E-code/S-code/radio-type numbering; the
 self-test → alarm-code path; the `High water` sensor input, traced end to
 end from silkscreen to alarm code.
 
-**Open — highest value first:** the RF service/handheld command protocol
-(needs a live capture, static analysis can't get further); the physical
-Test-button GPIO/timer; the other 3 sensor inputs (`Startup level`,
-`Chemical pressure`, `Spare` have no traced firmware consumer yet); an
-ESP32+nRF905 TX proof-of-concept (radio config is fully known, but nothing
-has transmitted yet — the actual open question is whether the real panel
-accepts it).
+**Open — highest value first:** the RF service/handheld command set is traced
+statically (dispatcher, command semantics — [docs/ghidra/codes.md](docs/ghidra/codes.md)
+§4) but still needs a live capture to confirm on air; an ESP32+nRF905 TX
+proof-of-concept (radio config is fully known, but nothing has transmitted
+yet — the actual open question is whether the real panel accepts it); the
+panel's own firmware (service reminders `E401`–`E403`, the `0x10` reply
+flag) — needs the panel's chip, not U2's. The physical Test-button
+GPIO/timer (`FUN_a245`, [codes.md](docs/ghidra/codes.md) §5) and the other 3
+sensor inputs (`Startup level`, `Chemical pressure`, `Spare` —
+[eeprom-map.md](docs/eeprom-map.md)) are now traced from silkscreen to
+firmware.
 
 **Where to look:**
 
